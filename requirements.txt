@@ -1,0 +1,36 @@
+# Syn_LLM/requirements.txt
+# UPDATED FILE - Added Markdown and Pillow libraries
+
+# Core GUI Framework
+PyQt6
+
+# Async Integration for Qt
+qasync
+
+# Ollama Client Library
+ollama
+
+# --- RAG Dependencies ---
+# Vector Database & Search
+numpy      # Required by embedding/math operations
+
+# Embedding Model Library
+sentence-transformers
+
+# Text Splitting for RAG
+langchain-text-splitters
+
+# Document Reading Libraries
+PyPDF2      # For reading PDF files
+python-docx # For reading DOCX files
+
+# Vector DB (If using ChromaDB directly, keep this)
+# chromadb
+
+# --- UI Enhancements ---
+Markdown    # For rendering Markdown in chat bubbles
+Pillow      # For image handling (loading, resizing, encoding)
+
+
+# Library to load environment variables from .env files (Optional - if keeping Gemini)
+# python-dotenv
