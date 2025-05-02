@@ -1,5 +1,5 @@
-# SynaChat/utils/constants.py
-# UPDATED FILE - Changed RAG_NUM_RESULTS to 2
+# Syn_LLM/utils/constants.py
+# UPDATED FILE - Changed default font to sans-serif
 
 import os
 import sys
@@ -13,13 +13,13 @@ APP_VERSION = "3.3-ChromaDB" # Updated version
 
 # --- API & Model Configuration ---
 DEFAULT_OLLAMA_MODEL = "codellama:13b" # Keep the 13b model from previous step
-# AVAILABLE_GEMINI_MODELS = [ ... ] # Kept for reference if needed
-# DEFAULT_GEMINI_MODEL_NAME = "gemini-1.5-pro-preview-0416"
 DEFAULT_MODEL_NAME = DEFAULT_OLLAMA_MODEL # Keep this linked to the Ollama default
 
 # --- UI Appearance ---
-CHAT_FONT_FILENAME = "JetBrainsMono-Regular.ttf"
-CHAT_FONT_FAMILY = "JetBrains Mono"
+# REMOVED specific font file
+# CHAT_FONT_FILENAME = "JetBrainsMono-Regular.ttf"
+# Use a generic font family request - OS will provide a default sans-serif
+CHAT_FONT_FAMILY = "SansSerif"
 CHAT_FONT_SIZE = 10
 MAX_CHAT_AREA_WIDTH = 900
 LOADING_GIF_FILENAME = "loading.gif"

@@ -1,3 +1,6 @@
+# Syn_LLM/main.py
+# UPDATED FILE - Removed specific font loading
+
 import sys
 import os
 import traceback
@@ -7,7 +10,7 @@ import asyncio # Needed for async ChatManager methods
 # --- PyQt6 Imports ---
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt, QTimer # Added QTimer
-from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtGui import QFontDatabase # Keep for potential future use or logging
 
 # --- qasync Import ---
 try:
@@ -34,7 +37,8 @@ try:
     from backend.ollama_adapter import OllamaAdapter # USE OLLAMA
     # from backend.gemini_adapter import GeminiAdapter # Keep import if fallback is desired
     # --------------------------
-    from utils.constants import CHAT_FONT_FAMILY, CHAT_FONT_FILENAME, LOG_LEVEL, LOG_FORMAT, APP_VERSION, APP_NAME
+    # Removed CHAT_FONT_FILENAME import as it's no longer used here
+    from utils.constants import CHAT_FONT_FAMILY, LOG_LEVEL, LOG_FORMAT, APP_VERSION, APP_NAME
 except ImportError as e:
     print(f"[CRITICAL] Failed to import core components: {e}", file=sys.stderr)
     print(f"PYTHONPATH: {sys.path}", file=sys.stderr)
@@ -68,15 +72,17 @@ async def async_main():
     else: application_path = os.path.dirname(os.path.abspath(__file__))
     logger.info(f"Application base path: {application_path}")
 
-    # Load Font
-    logger.info("--- Font Setup ---")
-    font_path = os.path.join(application_path, "assets", CHAT_FONT_FILENAME)
-    if os.path.exists(font_path):
-        font_id = QFontDatabase.addApplicationFont(font_path)
-        if font_id != -1: logger.info(f"Font '{CHAT_FONT_FILENAME}' loaded.")
-        else: logger.error(f"Failed to load font: {font_path}")
-    else: logger.error(f"Font file not found: {font_path}")
-    logger.info("--- Font Setup Done ---")
+    # --- Font Loading REMOVED ---
+    # logger.info("--- Font Setup ---")
+    # font_path = os.path.join(application_path, "assets", CHAT_FONT_FILENAME) # This constant is removed
+    # if os.path.exists(font_path):
+    #     font_id = QFontDatabase.addApplicationFont(font_path)
+    #     if font_id != -1: logger.info(f"Font '{CHAT_FONT_FILENAME}' loaded.")
+    #     else: logger.error(f"Failed to load font: {font_path}")
+    # else: logger.error(f"Font file not found: {font_path}")
+    logger.info("--- Font Setup: Relying on system fonts (Using CHAT_FONT_FAMILY constant) ---")
+    # --- Font Loading REMOVED ---
+
 
     # App Metadata & Style
     app.setStyle("Fusion")

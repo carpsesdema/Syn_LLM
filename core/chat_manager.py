@@ -1,3 +1,5 @@
+# Syn_LLM/core/chat_manager.py
+# UPDATED FILE - Modified RAG prompt template
 
 import logging
 import asyncio
@@ -386,8 +388,17 @@ class ChatManager(QObject):
         history_for_backend = [msg for msg in self._conversation_history if msg.role in [USER_ROLE, MODEL_ROLE] and (not msg.metadata or not msg.metadata.get("is_internal"))]
         final_prompt_message: Optional[ChatMessage] = None
 
+        # ***** MODIFICATION START *****
         if rag_context_str:
-            prompt_template = ("Okay, SynapseChat. Based on the user's request: '{query}', consider these relevant snippets from their existing code:\n\n{context}\n\nUse these snippets to ensure consistency with existing patterns, variable names, and functions. Generate the Python code needed to fulfill the request, integrating it logically with the provided context.")
+            # New prompt template - less directive about using RAG context
+            prompt_template = (
+                "User Query: '{query}'\n\n"
+                "[Reference Code Context (for style/names if relevant)]:\n{context}\n\n"
+                "Provide a comprehensive and helpful answer to the user's query, drawing on general programming knowledge and best practices. "
+                "Refer to the context only if directly needed for consistency."
+            )
+            # ***** MODIFICATION END *****
+
             augmented_text = prompt_template.format(context=rag_context_str, query=user_query_text)
             logger.debug(f"Augmented prompt created. Length: {len(augmented_text)}")
             final_parts = [augmented_text];

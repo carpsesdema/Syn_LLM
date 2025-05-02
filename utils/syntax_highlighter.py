@@ -1,36 +1,53 @@
+# Syn_LLM/utils/syntax_highlighter.py
+# UPDATED FILE - Use document's font for style creation
+
 import sys
 from PyQt6.QtCore import QRegularExpression
 from PyQt6.QtGui import QColor, QTextCharFormat, QFont, QSyntaxHighlighter, QTextDocument
 
-# Helper function to create format
-def format_text(color_name, style=''):
-    """Return a QTextCharFormat with the given attributes."""
+# Helper function to create format using base font properties
+def format_text(base_font: QFont, color_name, style=''):
+    """Return a QTextCharFormat with the given attributes, based on base_font."""
     _color = QColor()
     _color.setNamedColor(color_name)
 
     _format = QTextCharFormat()
+    _format.setFont(base_font) # Start with base font
     _format.setForeground(_color)
+
+    # Apply weight/italic modifications
+    current_weight = base_font.weight()
+    is_italic = base_font.italic()
+
     if 'bold' in style:
         _format.setFontWeight(QFont.Weight.Bold)
+    # else: Keep base font weight
+    #    _format.setFontWeight(current_weight) # Explicitly set base weight if needed
+
     if 'italic' in style:
         _format.setFontItalic(True)
+    # else: Keep base font italic state
+    #    _format.setFontItalic(is_italic) # Explicitly set base italic if needed
+
 
     return _format
 
 # Define styles using the helper function - UPDATED FOR DARK THEME
 # Colors inspired by typical dark IDE themes (like VS Code Dark+)
-STYLES = {
-    'keyword': format_text('#569cd6'),     # Blue for keywords (like import, for, if)
-    'operator': format_text('#d4d4d4'),    # Default text color (light gray) for operators
-    'brace': format_text('#d4d4d4'),       # Default text color for braces
-    'defclass': format_text('#4ec9b0'),    # Teal for def/class names
-    'string': format_text('#ce9178'),     # Orange-ish for strings
-    'string2': format_text('#ce9178'),    # Orange-ish for triple-quoted strings
-    'comment': format_text('#6a9955', 'italic'), # Green italic for comments
-    'self': format_text('#9cdcfe'),        # Light blue for self
-    'numbers': format_text('#b5cea8'),    # Olive-green for numbers
-    'decorator': format_text('#d7ba7d'),   # Yellow-gold for decorators (@)
-    'function_call': format_text('#dcdcaa'), # Light yellow for function calls
+# NOTE: Styles are now generated dynamically based on the document's font
+#       in the __init__ method. This dictionary serves as color/style definitions.
+STYLE_DEFINITIONS = {
+    'keyword': ('#569cd6', ''),        # Blue for keywords
+    'operator': ('#d4d4d4', ''),       # Default text color for operators
+    'brace': ('#d4d4d4', ''),          # Default text color for braces
+    'defclass': ('#4ec9b0', ''),       # Teal for def/class names
+    'string': ('#ce9178', ''),        # Orange-ish for strings
+    'string2': ('#ce9178', ''),       # Orange-ish for triple-quoted strings
+    'comment': ('#6a9955', 'italic'), # Green italic for comments
+    'self': ('#9cdcfe', ''),           # Light blue for self
+    'numbers': ('#b5cea8', ''),       # Olive-green for numbers
+    'decorator': ('#d7ba7d', ''),      # Yellow-gold for decorators (@)
+    'function_call': ('#dcdcaa', ''),  # Light yellow for function calls
 }
 
 
@@ -65,65 +82,70 @@ class PythonSyntaxHighlighter(QSyntaxHighlighter):
         r'\{', r'\}', r'\(', r'\)', r'\[', r'\]',
     ]
 
-    def __init__(self, parent_widget): # Expecting the parent widget (e.g., QTextEdit)
+    def __init__(self, document: QTextDocument): # Expecting the QTextDocument directly
         """
         Initializes the highlighter.
         Args:
-            parent_widget: The parent QTextEdit widget or similar object providing a document().
+            document: The QTextDocument to apply highlighting to.
         """
-        if isinstance(parent_widget, QTextDocument):
-             # If a document was passed directly, use it (maintain compatibility if needed)
-             doc = parent_widget
-             super().__init__(doc)
-        elif hasattr(parent_widget, 'document') and callable(parent_widget.document):
-             # If it's a widget-like object, get its document
-             doc = parent_widget.document()
-             super().__init__(doc)
-        else:
-             # Fallback or raise error if neither document nor widget with document method is provided
-             raise TypeError("Parent must be a QTextDocument or an object with a document() method.")
+        super().__init__(document)
+        self.doc_font = document.defaultFont() # Get the font set on the document
 
+        # --- Generate styles based on document font ---
+        self.styles = {key: format_text(self.doc_font, color, style_str)
+                       for key, (color, style_str) in STYLE_DEFINITIONS.items()}
+        # Ensure all required styles exist
+        required_styles = ['keyword', 'operator', 'brace', 'defclass', 'string', 'string2', 'comment', 'self', 'numbers', 'decorator', 'function_call']
+        for req_style in required_styles:
+             if req_style not in self.styles:
+                 # Provide a default format if somehow missing (shouldn't happen with above dict)
+                 self.styles[req_style] = QTextCharFormat()
+                 self.styles[req_style].setFont(self.doc_font)
+                 self.styles[req_style].setForeground(QColor("gray")) # Fallback color
+                 print(f"Warning: Style '{req_style}' missing, using fallback.")
+
+        # ---------------------------------------------
 
         # Multi-line strings (expression, flag, style)
-        # Ensure styles used here are defined in STYLES dictionary
-        self.tri_single = (QRegularExpression("'''"), 1, STYLES['string2'])
-        self.tri_double = (QRegularExpression('"""'), 2, STYLES['string2'])
+        # Use the dynamically generated styles
+        self.tri_single = (QRegularExpression("'''"), 1, self.styles['string2'])
+        self.tri_double = (QRegularExpression('"""'), 2, self.styles['string2'])
 
         rules = []
 
         # Keyword, operator, and brace rules
         # Use raw strings r'...' for patterns containing \b or other sequences if needed
-        rules += [(r'\b%s\b' % w, 0, STYLES['keyword']) for w in PythonSyntaxHighlighter.keywords]
-        rules += [(r'%s' % o, 0, STYLES['operator']) for o in PythonSyntaxHighlighter.operators]
-        rules += [(r'%s' % b, 0, STYLES['brace']) for b in PythonSyntaxHighlighter.braces]
+        rules += [(r'\b%s\b' % w, 0, self.styles['keyword']) for w in PythonSyntaxHighlighter.keywords]
+        rules += [(r'%s' % o, 0, self.styles['operator']) for o in PythonSyntaxHighlighter.operators]
+        rules += [(r'%s' % b, 0, self.styles['brace']) for b in PythonSyntaxHighlighter.braces]
 
         # All other rules
         rules += [
             # 'self' - Use raw string r'...' for \b
-            (r'\bself\b', 0, STYLES['self']),
+            (r'\bself\b', 0, self.styles['self']),
 
             # Decorators
-            (r'@[a-zA-Z_][a-zA-Z0-9_]*', 0, STYLES['decorator']),
+            (r'@[a-zA-Z_][a-zA-Z0-9_]*', 0, self.styles['decorator']),
 
             # Function calls - Use raw string r'...' for \b
             # Updated regex to be less greedy and avoid highlighting class names before instantiation
-            (r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()', 1, STYLES['function_call']),
+            (r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?=\()', 1, self.styles['function_call']),
 
             # 'def' and 'class' followed by name - Use raw string r'...' for \b and \s
-            (r'\b(def|class)\b\s+([A-Za-z_][A-Za-z0-9_]*)', 2, STYLES['defclass']), # Match name after def/class
+            (r'\b(def|class)\b\s+([A-Za-z_][A-Za-z0-9_]*)', 2, self.styles['defclass']), # Match name after def/class
 
             # Numeric literals - Use raw string r'...' for \b
-            (r'\b[+-]?[0-9]+[lL]?\b', 0, STYLES['numbers']),
-            (r'\b[+-]?0[xX][0-9A-Fa-f]+[lL]?\b', 0, STYLES['numbers']),
-            (r'\b[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\b', 0, STYLES['numbers']),
+            (r'\b[+-]?[0-9]+[lL]?\b', 0, self.styles['numbers']),
+            (r'\b[+-]?0[xX][0-9A-Fa-f]+[lL]?\b', 0, self.styles['numbers']),
+            (r'\b[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\b', 0, self.styles['numbers']),
 
             # Double-quoted string, possibly containing escape sequences - Use raw string r'...'
-            (r'"[^"\\]*(\\.[^"\\]*)*"', 0, STYLES['string']),
+            (r'"[^"\\]*(\\.[^"\\]*)*"', 0, self.styles['string']),
             # Single-quoted string, possibly containing escape sequences - Use raw string r'...'
-            (r"'[^'\\]*(\\.[^'\\]*)*'", 0, STYLES['string']),
+            (r"'[^'\\]*(\\.[^'\\]*)*'", 0, self.styles['string']),
 
             # From '#' until a newline
-            (r'#[^\n]*', 0, STYLES['comment']),
+            (r'#[^\n]*', 0, self.styles['comment']),
         ]
 
         # Build a QRegularExpression for each pattern

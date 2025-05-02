@@ -1,5 +1,5 @@
 # SynaChat/ui/chat_item_delegate.py
-# UPDATED FILE - Added subtle border to bubbles AND fixed dynamic width calculation
+# UPDATED FILE - Implemented Strategy 2: Single-Side Alignment with Indentation
 
 import logging
 import base64
@@ -42,6 +42,7 @@ IMAGE_PADDING = 5
 MAX_IMAGE_WIDTH = 250 # Smaller max width for delegate rendering
 MAX_IMAGE_HEIGHT = 250
 MIN_BUBBLE_WIDTH = 50 # Minimum width for a bubble
+USER_BUBBLE_INDENT = 40 # <<< ADDED: Indentation for user bubbles from the left margin
 
 # --- Colors (can be moved to constants or theme manager) ---
 USER_BUBBLE_COLOR = QColor("#0b93f6") # Blue
@@ -96,7 +97,7 @@ class ChatItemDelegate(QStyledItemDelegate):
         if available_content_width <= 0: available_content_width = 1 # Ensure positive width
 
         # Calculate the size the bubble content *needs* based on text/images
-        required_content_size = self._calculate_content_size(message, available_content_width)
+        required_content_size = self._calculate_content_size(message, available_content_width, is_user) # <<< Pass is_user
 
         # Calculate the final bubble rectangle based on required size and alignment
         bubble_rect = self._get_bubble_rect(option.rect, required_content_size, is_user)
@@ -188,14 +189,15 @@ class ChatItemDelegate(QStyledItemDelegate):
         if not isinstance(message, ChatMessage):
             return super().sizeHint(option, index)
 
+        is_user = (message.role == USER_ROLE) # <<< Get role
+
         # Calculate available width for content within the item rect margins
-        # Use the width from the option provided by the view, which should be accurate
         available_view_width = option.rect.width()
         available_content_width = available_view_width - 2 * BUBBLE_MARGIN_H
         if available_content_width <= 0: available_content_width = 1
 
         # Get the size required by the content itself
-        content_size = self._calculate_content_size(message, available_content_width)
+        content_size = self._calculate_content_size(message, available_content_width, is_user) # <<< Pass is_user
 
         # Add vertical margins to the content height for the final item height
         final_height = content_size.height() + 2 * BUBBLE_MARGIN_V
@@ -220,7 +222,7 @@ class ChatItemDelegate(QStyledItemDelegate):
         return AI_BUBBLE_COLOR, AI_TEXT_COLOR
 
     def _get_bubble_rect(self, item_rect: QRect, content_size: QSize, is_user: bool) -> QRect:
-        """Calculates the actual bubble rectangle based on content size and alignment."""
+        """Calculates the actual bubble rectangle based on content size and alignment (Strategy 2: Indented)."""
         bubble_width = content_size.width()
         bubble_height = content_size.height()
 
@@ -228,20 +230,32 @@ class ChatItemDelegate(QStyledItemDelegate):
         if bubble_width <= 0: bubble_width = MIN_BUBBLE_WIDTH
         if bubble_height <= 0: bubble_height = self._font_metrics.height() + 2 * BUBBLE_PADDING_V
 
-
+        # --- Strategy 2: Single-Side Alignment with Indentation ---
+        base_x = item_rect.left() + BUBBLE_MARGIN_H
         if is_user:
-            # Align right: Start bubble at (right edge - margin - bubble width)
-            bubble_x = item_rect.right() - BUBBLE_MARGIN_H - bubble_width
+            bubble_x = base_x + USER_BUBBLE_INDENT
         else:
-            # Align left: Start bubble at left edge + margin
-            bubble_x = item_rect.left() + BUBBLE_MARGIN_H
+            # AI, System, Error messages align to the base left margin
+            bubble_x = base_x
+        # --- End Strategy 2 ---
 
         # Vertical position starts after top margin
         bubble_y = item_rect.top() + BUBBLE_MARGIN_V
 
+        # --- Ensure bubble width does not exceed available space ---
+        # Calculate the right boundary allowed for the bubble
+        max_right = item_rect.right() - BUBBLE_MARGIN_H
+        # Check if the calculated bubble end exceeds the max right boundary
+        if bubble_x + bubble_width > max_right:
+            # If it does, adjust the width to fit
+            bubble_width = max_right - bubble_x
+            # Ensure width doesn't become less than minimum
+            bubble_width = max(bubble_width, MIN_BUBBLE_WIDTH)
+        # --- End Width Check ---
+
         return QRect(bubble_x, bubble_y, bubble_width, bubble_height)
 
-    def _calculate_content_size(self, message: ChatMessage, available_width: int) -> QSize:
+    def _calculate_content_size(self, message: ChatMessage, available_width: int, is_user: bool) -> QSize: # <<< Added is_user
         """
         Calculates the size needed for the bubble content (text + images),
         constrained by the available width.
@@ -249,52 +263,46 @@ class ChatItemDelegate(QStyledItemDelegate):
         """
         total_height = 0
         actual_content_width = 0 # Track the widest element needs
+
+        # --- Adjust available width based on indentation ---
+        effective_available_width = available_width
+        if is_user:
+             effective_available_width -= USER_BUBBLE_INDENT
+        effective_available_width = max(1, effective_available_width) # Ensure positive
+        # --- End Adjustment ---
+
         # Constrain the width *inside* the padding
-        inner_width_constraint = max(1, available_width - 2 * BUBBLE_PADDING_H)
+        inner_width_constraint = max(1, effective_available_width - 2 * BUBBLE_PADDING_H)
 
         # 1. Calculate Text Size
         text_render_height = 0
-        actual_text_width = 0 # <<< Reset here
+        actual_text_width = 0
         if message.text:
-            # Get the document, potentially from cache (passing constraint is okay for cache key)
             text_doc = self._get_prepared_text_document(message, inner_width_constraint)
-
-            # --- MODIFICATION START ---
-            # Calculate ideal width *without* the constraint first
-            # Set text width to -1 to let QTextDocument calculate the ideal width
             text_doc.setTextWidth(-1)
             ideal_text_width = int(text_doc.size().width())
-
-            # Determine the width to actually use for rendering and size calculation
-            # It's the smaller of the ideal width and the constraint
             render_text_width = min(ideal_text_width, inner_width_constraint)
-            actual_text_width = render_text_width # Track the width needed *by the text*
-
-            # Set the document width for correct height calculation *at the render width*
-            text_doc.setTextWidth(max(1, render_text_width)) # Use max(1, ...) to avoid zero width
-            text_render_height = max(0, int(text_doc.size().height())) # Get height based on render width
-            # --- MODIFICATION END ---
+            actual_text_width = render_text_width
+            text_doc.setTextWidth(max(1, render_text_width))
+            text_render_height = max(0, int(text_doc.size().height()))
 
             total_height += text_render_height
-            # Use the calculated actual_text_width for the overall content width calculation
             actual_content_width = max(actual_content_width, actual_text_width)
 
         # 2. Calculate Image Sizes
         if message.has_images:
-            if message.text and total_height > 0: total_height += IMAGE_PADDING # Padding between text and first image
+            if message.text and total_height > 0: total_height += IMAGE_PADDING
             image_count = 0
             for img_part in message.image_parts:
                 pixmap = self._get_image_pixmap(img_part)
                 if pixmap and not pixmap.isNull():
-                    if image_count > 0: total_height += IMAGE_PADDING # Padding between images
+                    if image_count > 0: total_height += IMAGE_PADDING
 
-                    # Scale pixmap to fit inner content width and max dimensions
                     target_width = min(pixmap.width(), inner_width_constraint, MAX_IMAGE_WIDTH)
                     scaled_pixmap = pixmap.scaledToWidth(target_width, Qt.TransformationMode.SmoothTransformation)
                     if scaled_pixmap.height() > MAX_IMAGE_HEIGHT:
                          scaled_pixmap = scaled_pixmap.scaledToHeight(MAX_IMAGE_HEIGHT, Qt.TransformationMode.SmoothTransformation)
 
-                    # Ensure non-negative dimensions
                     img_render_height = max(0, scaled_pixmap.height())
                     img_render_width = max(0, scaled_pixmap.width())
 
@@ -302,13 +310,11 @@ class ChatItemDelegate(QStyledItemDelegate):
                     actual_content_width = max(actual_content_width, img_render_width)
                     image_count += 1
                 else:
-                    # Placeholder for image error? Add height for a line of text.
                     if image_count > 0: total_height += IMAGE_PADDING
                     error_text_height = self._font_metrics.height()
                     total_height += error_text_height
                     actual_content_width = max(actual_content_width, self._font_metrics.horizontalAdvance("[Image Error]"))
                     image_count += 1
-
 
         # Add bubble padding to the calculated content dimensions
         final_height = total_height + 2 * BUBBLE_PADDING_V
@@ -319,46 +325,37 @@ class ChatItemDelegate(QStyledItemDelegate):
         min_bubble_height = self._font_metrics.height() + 2 * BUBBLE_PADDING_V
         final_height = max(final_height, min_bubble_height)
 
-        # Ensure non-negative dimensions before returning
         final_width = max(1, final_width)
         final_height = max(1, final_height)
 
-        # IMPORTANT: Make sure the final width doesn't exceed the available space
-        final_width = min(final_width, available_width)
+        # Ensure the final width doesn't exceed the *effective* available space
+        final_width = min(final_width, effective_available_width)
 
         return QSize(final_width, final_height)
 
     def _get_prepared_text_document(self, message: ChatMessage, width_constraint: int) -> QTextDocument:
         """Creates or retrieves a cached QTextDocument for the message text."""
-        # Ensure metadata exists before accessing it
         is_streaming = (message.metadata is not None) and message.metadata.get("is_streaming", False)
-        # Use empty string hash if text is None/empty to avoid errors
         text_content = message.text if message.text else ""
-        # Simple hash for caching, consider role?
         content_hash = hashlib.sha256(text_content.encode('utf-8')).hexdigest()
-        # Added role to cache key
         cache_key = (content_hash, width_constraint, is_streaming, message.role)
 
         cached_doc = self._text_doc_cache.get(cache_key)
         if cached_doc:
-            # Ensure width is set correctly on cached doc - this is important if _calculate_content_size changes it
             constrained_width = max(width_constraint, 1)
-            if abs(cached_doc.textWidth() - constrained_width) > 1: # Allow minor tolerance
-                 logger.debug(f"Updating cached doc width from {cached_doc.textWidth()} to {constrained_width}")
+            if abs(cached_doc.textWidth() - constrained_width) > 1:
+                 # logger.debug(f"Updating cached doc width from {cached_doc.textWidth()} to {constrained_width}") # Too noisy
                  cached_doc.setTextWidth(constrained_width)
             return cached_doc
 
-        # --- Create New Document ---
-        logger.debug(f"Cache miss for key {cache_key}. Creating new QTextDocument.")
+        # logger.debug(f"Cache miss for key {cache_key}. Creating new QTextDocument.") # Too noisy
         doc = QTextDocument()
         doc.setDefaultFont(self._font)
-        doc.setDocumentMargin(0) # Margin handled by bubble padding
+        doc.setDocumentMargin(0)
 
         _, text_color = self._get_colors(message.role)
-        # Use text_content which is guaranteed to be a string
         html_content = self._prepare_html(text_content, text_color, is_streaming)
 
-        # --- Set StyleSheet for QTextDocument ---
         doc.setDefaultStyleSheet(f"""
             p {{ margin: 0 0 3px 0; padding: 0; line-height: 130%; }}
             ul, ol {{ margin: 3px 0 3px 20px; padding: 0; }}
@@ -406,43 +403,27 @@ class ChatItemDelegate(QStyledItemDelegate):
              h6 {{ font-size: 0.9em; font-style: italic; color: {text_color.darker(110).name()}; }}
              hr {{ border: 0; height: 1px; background-color: {BUBBLE_BORDER_COLOR.name()}; margin: 10px 0; }}
         """)
-        # --- End StyleSheet Setting ---
 
         doc.setHtml(html_content)
-
-        # Set the width constraint *before* calculating size or caching
         doc.setTextWidth(max(width_constraint, 1))
-
-        # Store in cache
         self._text_doc_cache[cache_key] = doc
         return doc
 
     def _prepare_html(self, text: str, text_color: QColor, is_streaming: bool) -> str:
         """Converts message text to basic HTML for QTextDocument."""
         if not text: return ""
-
-        # 1. Escape basic HTML characters first to prevent injection
         escaped_text = html.escape(text)
-
-        # 2. Handle newlines -> <br> (Do this *after* escaping)
-        # Store this as a fallback
         html_content_fallback = escaped_text.replace('\n', '<br/>')
-        html_content = html_content_fallback # Default to this
+        html_content = html_content_fallback
 
-        # 3. Apply Markdown conversion only if not streaming and library available
         if not is_streaming and MARKDOWN_AVAILABLE:
             try:
-                # Convert markdown.
                 md_content = markdown.markdown(text, extensions=['fenced_code', 'nl2br', 'tables', 'sane_lists', 'extra'])
-                # Use markdown output only if conversion succeeds
                 html_content = md_content
             except Exception as e:
                 logger.error(f"Markdown conversion failed: {e}. Using escaped text with <br>.")
-                # html_content remains the fallback version
                 pass
 
-        # Wrap in basic body tag with color style
-        # QTextDocument expects valid HTML structure
         final_html = f"""<!DOCTYPE html>
         <html><head><meta charset="UTF-8"></head>
         <body style="color:{text_color.name()};">
@@ -459,16 +440,12 @@ class ChatItemDelegate(QStyledItemDelegate):
             logger.warning("Attempted to decode image, but 'data' key is missing, empty, or not a string.")
             return None
 
-        # Use hash of base64 data as cache key
         data_hash = hashlib.sha256(base64_data.encode()).hexdigest()
         cached_pixmap = self._image_pixmap_cache.get(data_hash)
         if cached_pixmap:
-            # logger.debug(f"Image cache hit for hash {data_hash[:8]}")
             return cached_pixmap
 
-        # logger.debug(f"Image cache miss for hash {data_hash[:8]}. Decoding image.")
         try:
-            # Ensure padding is correct for base64 decoding
             missing_padding = len(base64_data) % 4
             if missing_padding:
                 base64_data += '=' * (4 - missing_padding)
@@ -478,7 +455,7 @@ class ChatItemDelegate(QStyledItemDelegate):
             if qimage.loadFromData(image_bytes):
                  pixmap = QPixmap.fromImage(qimage)
                  if not pixmap.isNull():
-                     self._image_pixmap_cache[data_hash] = pixmap # Store in cache
+                     self._image_pixmap_cache[data_hash] = pixmap
                      return pixmap
                  else:
                      logger.error("QImage loaded but QPixmap conversion resulted in null.")

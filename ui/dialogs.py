@@ -1,5 +1,6 @@
-# SynaChat/ui/dialogs.py
-# UPDATED FILE (Fixed WordWrap AttributeError)
+# Syn_LLM/ui/dialogs.py
+# UPDATED FILE - Ensured Code Viewer uses monospace font explicitly
+
 import logging
 import os
 from datetime import datetime
@@ -13,11 +14,10 @@ from PyQt6.QtWidgets import (
     QAbstractItemView, QFileDialog, QTreeWidget, QTreeWidgetItem
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-# --- MODIFIED ---
-from PyQt6.QtGui import QFont, QClipboard, QIcon, QFontDatabase, QTextOption # Added QTextOption
-# --------------
+from PyQt6.QtGui import QFont, QClipboard, QIcon, QFontDatabase, QTextOption
 
 # --- Local Imports ---
+# CHAT_FONT_SIZE is still used for base size calculation
 from utils.constants import CHAT_FONT_FAMILY, CHAT_FONT_SIZE, CONVERSATIONS_DIR
 from utils.syntax_highlighter import PythonSyntaxHighlighter
 from core.chat_manager import ChatManager
@@ -28,7 +28,7 @@ from .widgets import COPY_ICON, CHECK_ICON
 
 logger = logging.getLogger(__name__)
 
-# --- Code Viewer Window --- (Existing Code remains the same)
+# --- Code Viewer Window ---
 class CodeViewerWindow(QDialog):
     """A non-modal dialog to display code blocks from the chat."""
     def __init__(self, parent: Optional[QWidget] = None):
@@ -43,10 +43,11 @@ class CodeViewerWindow(QDialog):
         self._block_counter = 0 # Simple counter for labels
 
         # --- Font Setup ---
-        # Use a known monospace font if available, otherwise default
-        code_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE) # Use standard size
-        fixed_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
-        code_font.setFamily(fixed_font.family()) # Prefer system fixed-width font
+        # Explicitly get a fixed-width font for the code editor
+        code_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        # Use the CHAT_FONT_SIZE as the base size for consistency
+        code_font.setPointSize(CHAT_FONT_SIZE)
+        logger.info(f"CodeViewerWindow using Monospace Font: {code_font.family()} {code_font.pointSize()}pt")
 
         # Main layout
         layout = QVBoxLayout(self)
@@ -58,6 +59,7 @@ class CodeViewerWindow(QDialog):
         # Left: List of blocks
         self.list_widget = QListWidget()
         self.list_widget.setObjectName("CodeBlockList")
+         # Use default font for list (will be SansSerif now)
         self.list_widget.setMinimumWidth(200)
         self.splitter.addWidget(self.list_widget)
 
@@ -65,12 +67,13 @@ class CodeViewerWindow(QDialog):
         self.code_edit = QTextEdit()
         self.code_edit.setObjectName("CodeViewerEdit")
         self.code_edit.setReadOnly(True)
-        self.code_edit.setFont(code_font)
+        self.code_edit.setFont(code_font) # Apply the monospace font
         self.code_edit.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap) # No wrap for code
 
-        # Apply syntax highlighting (only Python for now)
+        # Apply syntax highlighting (passing the document)
         self.highlighter = None
         try:
+            # Pass the document which now has the monospace font set
             self.highlighter = PythonSyntaxHighlighter(self.code_edit.document())
             logger.info("CodeViewerWindow: PythonSyntaxHighlighter attached.")
         except Exception as e_hl:
@@ -79,7 +82,7 @@ class CodeViewerWindow(QDialog):
         self.splitter.addWidget(self.code_edit)
         self.splitter.setSizes([220, 480]) # Adjust initial sizes
 
-        # Bottom buttons
+        # Bottom buttons (use default font)
         button_layout = QHBoxLayout()
         self.copy_button = QPushButton(" Copy Code")
         self.copy_button.setToolTip("Copy the code currently shown in the viewer")
@@ -200,7 +203,7 @@ class CodeViewerWindow(QDialog):
          self.hide()
          event.ignore() # Prevent the dialog from being destroyed
 
-# --- Personality Editor Dialog --- (Existing Code remains the same)
+# --- Personality Editor Dialog ---
 class EditPersonalityDialog(QDialog):
     """Dialog window for editing the AI's personality/system prompt."""
     def __init__(self, current_prompt: Optional[str], parent: Optional[QWidget] = None):
@@ -214,12 +217,13 @@ class EditPersonalityDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
+        # Use the default font (now SansSerif)
         dialog_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE)
         label_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE - 1)
 
         info_label = QLabel(
             "Enter the system prompt or personality instructions for the AI below.\n"
-            "Leave empty to use the default behavior." # Removed API reconfig notice
+            "Leave empty to use the default behavior."
         )
         info_label.setFont(label_font)
         info_label.setWordWrap(True)
@@ -228,7 +232,7 @@ class EditPersonalityDialog(QDialog):
 
         self.prompt_edit = QTextEdit()
         self.prompt_edit.setObjectName("PersonalityPromptEdit")
-        self.prompt_edit.setFont(dialog_font)
+        self.prompt_edit.setFont(dialog_font) # Apply default font
         self.prompt_edit.setPlaceholderText("e.g., You are a helpful assistant specializing in Python...")
         self.prompt_edit.setPlainText(current_prompt or "")
         self.prompt_edit.setAcceptRichText(False)
@@ -254,7 +258,7 @@ class EditPersonalityDialog(QDialog):
         super().showEvent(event)
         self.prompt_edit.setFocus()
 
-# --- Session Manager Dialog --- (Existing Code remains the same)
+# --- Session Manager Dialog ---
 class SessionManagerDialog(QDialog):
     """Dialog for managing saved chat sessions."""
     # No external signals needed, interacts directly with ChatManager
@@ -278,6 +282,7 @@ class SessionManagerDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(15, 15, 15, 15)
 
+        # Use default font
         dialog_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE)
         label_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE - 1)
 
@@ -286,7 +291,7 @@ class SessionManagerDialog(QDialog):
         layout.addWidget(list_label)
 
         self.session_list_widget = QListWidget()
-        self.session_list_widget.setFont(dialog_font)
+        self.session_list_widget.setFont(dialog_font) # Apply default font
         self.session_list_widget.setObjectName("SessionList")
         self.session_list_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.session_list_widget.itemSelectionChanged.connect(self._update_button_states)
@@ -462,7 +467,7 @@ class SessionManagerDialog(QDialog):
         super().showEvent(event)
         self.refresh_list()
 
-# --- RAG Viewer Dialog --- (Existing Code updated below)
+# --- RAG Viewer Dialog ---
 class RAGViewerDialog(QDialog):
     """A dialog to view documents and chunks indexed in the RAG database."""
 
@@ -481,6 +486,7 @@ class RAGViewerDialog(QDialog):
         self._all_metadata: List[Dict[str, Any]] = []
 
         # --- Font Setup ---
+        # Use default font (SansSerif)
         content_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE)
         label_font = QFont(CHAT_FONT_FAMILY, CHAT_FONT_SIZE - 1)
 
@@ -502,17 +508,14 @@ class RAGViewerDialog(QDialog):
         self.tree_widget.setHeaderLabels(["Indexed Item", "Chunks/Details"])
         self.tree_widget.setColumnWidth(0, 300) # Adjust column width
         self.tree_widget.itemSelectionChanged.connect(self._display_selected_content)
-        self.splitter.addWidget(self.tree_widget)
+        self.splitter.addWidget(self.tree_widget) # Uses default font
 
         # --- Right: Chunk Content Display ---
         self.content_edit = QTextEdit()
         self.content_edit.setObjectName("RAGContentViewerEdit")
         self.content_edit.setReadOnly(True)
-        self.content_edit.setFont(content_font)
-        # --- MODIFIED ---
-        # Use setWordWrapMode with QTextOption.WrapMode enum
+        self.content_edit.setFont(content_font) # Apply default font
         self.content_edit.setWordWrapMode(QTextOption.WrapMode.WordWrap) # Wrap content
-        # --- ---------
 
         self.splitter.addWidget(self.content_edit)
         self.splitter.setSizes([350, 450]) # Adjust initial sizes
