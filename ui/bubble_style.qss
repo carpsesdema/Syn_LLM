@@ -1,176 +1,88 @@
 /* SynaChat/ui/bubble_style.qss */
-/* Styles specific to chat bubbles using QTextEdit - REFINED */
+/* Styles for HTML content rendered within the ChatItemDelegate */
 
-/* Base styling for QTextEdit within bubbles */
-/* Apply common properties here */
-QTextEdit[objectName$="Bubble"] { /* Target any object ending with Bubble */
-    background-color: transparent; /* Make base background transparent within the styled bubble */
-    color: #dcdcdc; /* Default text color */
-    border: none; /* Remove default QTextEdit border */
-    padding: 8px 12px; /* Padding inside the text edit */
-    border-radius: 10px; /* Rounded corners for the background area */
-    font-size: 10pt; /* Match base font size */
-    margin: 0px; /* Let the container handle margins */
-    /* These prevent scrollbars showing up unexpectedly */
-    vertical-scrollbar-policy: scrollbar-always-off;
-    horizontal-scrollbar-policy: scrollbar-always-off;
-}
+/* --- Base Text Styling (within QTextDocument context) --- */
+/* Note: These apply to the HTML rendered by the delegate via QTextDocument. */
+/* It's often better to inject styles directly into the HTML string in the delegate */
+/* for more complex cases, but basic tags can be styled here. */
 
-/* Container styling (applied to the ChatBubbleWidget container via layout spacing) */
-/* We rely on layout spacing, but could add margins to the widget itself if needed */
-/* QWidget { margin: 2px 0px; } */
-
-
-/* User Bubble Specific Background/Color/Radius */
-QTextEdit#UserBubble {
-    background-color: #3b5a8c; /* User background */
-    color: #e0e0e0;
-    border-radius: 10px 10px 0px 10px;
-    /* border: 1px solid #4a6a9c; /* Optional border */
-}
-
-/* AI Bubble Specific Background/Color/Radius */
-QTextEdit#AiBubble {
-    background-color: #3c3f41; /* AI background */
-    color: #dcdcdc;
-    border-radius: 10px 10px 10px 0px;
-     /* border: 1px solid #555555; /* Optional border */
-}
-
-/* System Bubble Specific Background/Color/Radius */
-QTextEdit#SystemBubble {
-    background-color: #4a4e51;
-    color: #aabbcc;
-    border-radius: 5px;
-    font-style: italic;
-    font-size: 9pt;
-    text-align: center; /* May not center perfectly */
-    padding: 4px 10px;
-    border: 1px dashed #666666;
-    /* margin: 4px 40px; /* Apply margin to container widget, not textedit */
-}
-
-/* Error Bubble Specific Background/Color/Radius */
-QTextEdit#ErrorBubble {
-    background-color: #6e3b3b;
-    color: #ffcccc;
-    border-radius: 5px;
-    font-size: 9pt;
-    font-weight: bold;
-    padding: 5px 10px;
-    border: 1px solid #8e4b4b;
-     /* margin: 4px 20px; /* Apply margin to container widget, not textedit */
+body { /* Default text properties if not overridden by delegate */
+    /* color: #dcdcdc; */ /* Delegate sets color based on role */
+    /* font-family: "Segoe UI", ...; */ /* Delegate sets font */
+    /* font-size: 10pt; */ /* Delegate sets font size */
+    background-color: transparent; /* Ensure text background is transparent */
 }
 
 /* --- Styles for HTML elements rendered by Markdown --- */
 
 /* Code Blocks (<pre><code>) */
-QTextEdit pre {
+pre {
     background-color: #282c34; /* Code block background */
     border: 1px solid #4a505e;
     border-radius: 4px;
-    padding: 10px; /* More padding for code */
-    margin: 8px 0px; /* Spacing around code block */
+    padding: 10px; /* Padding inside the code block */
+    margin: 8px 2px; /* Spacing around code block, less horizontal margin */
     font-family: "JetBrains Mono", "Consolas", "Courier New", monospace; /* Monospace font */
     font-size: 9pt; /* Slightly smaller code font */
     color: #cccccc; /* Default code text color */
-    /* Enable wrapping within the <pre> block */
-    white-space: pre-wrap;
+    white-space: pre-wrap; /* Enable wrapping within the <pre> block */
     word-wrap: break-word;
-    /* Prevent hyphenation which looks bad in code */
-   -webkit-hyphens: none;
-   -moz-hyphens: none;
-   hyphens: none;
+    -webkit-hyphens: none; -moz-hyphens: none; hyphens: none; /* Prevent hyphenation */
 }
-
-QTextEdit code {
-    font-family: inherit;
-    background-color: transparent;
-    color: inherit;
-    padding: 0;
-    margin: 0;
-    border-radius: 0;
-    border: none;
-    font-size: inherit; /* Inherit size from pre */
+/* Ensure inline code within <pre> inherits correctly */
+pre code {
+    font-family: inherit; background-color: transparent; color: inherit;
+    padding: 0; margin: 0; border-radius: 0; border: none; font-size: inherit;
+}
+/* Style for inline code outside of <pre> blocks */
+code {
+    font-family: "JetBrains Mono", "Consolas", "Courier New", monospace;
+    background-color: #3c3f41; /* Slightly different background for inline */
+    color: #ce9178;            /* Use string-like color for inline */
+    padding: 1px 4px;          /* Small padding */
+    margin: 0 1px;             /* Small margin */
+    border-radius: 3px;        /* Rounded corners */
+    font-size: 9pt;            /* Match code block font size */
+    border: 1px solid #4a505e; /* Subtle border like blocks */
 }
 
 
 /* Basic Markdown elements */
-QTextEdit strong, QTextEdit b {
-    font-weight: bold;
-    color: #b39ddb; /* Violet/Purple bold color */
-}
-
-QTextEdit em, QTextEdit i {
-    font-style: italic;
-}
-
-QTextEdit a {
-    color: #61afef; /* Link color */
-    text-decoration: underline;
-}
-QTextEdit a:hover {
-    color: #82c0ff; /* Lighter link color on hover */
-}
+strong, b { font-weight: bold; color: #b39ddb; } /* Purple */
+em, i { font-style: italic; color: #9cdcfe; } /* Light blue */
+a { color: #61afef; text-decoration: underline; } /* Blue links */
+a:hover { color: #82c0ff; }
 
 /* Headings */
-QTextEdit h1 { font-size: 16pt; font-weight: bold; margin-top: 12px; margin-bottom: 6px; color: #61afef; border-bottom: 1px solid #454545; padding-bottom: 3px;}
-QTextEdit h2 { font-size: 14pt; font-weight: bold; margin-top: 10px; margin-bottom: 5px; color: #98c379; border-bottom: 1px solid #454545; padding-bottom: 2px;}
-QTextEdit h3 { font-size: 12pt; font-weight: bold; margin-top: 8px; margin-bottom: 4px; color: #e5c07b; }
-QTextEdit h4 { font-size: 11pt; font-weight: bold; margin-top: 6px; margin-bottom: 3px; color: #e06c75;}
-QTextEdit h5 { font-size: 10pt; font-weight: bold; margin-top: 5px; margin-bottom: 2px; color: #c678dd;}
-QTextEdit h6 { font-size: 10pt; font-style: italic; margin-top: 5px; margin-bottom: 2px; color: #abb2bf;}
-
+h1 { font-size: 16pt; font-weight: bold; margin-top: 12px; margin-bottom: 6px; color: #61afef; border-bottom: 1px solid #454545; padding-bottom: 3px;}
+h2 { font-size: 14pt; font-weight: bold; margin-top: 10px; margin-bottom: 5px; color: #98c379; border-bottom: 1px solid #454545; padding-bottom: 2px;} /* Green */
+h3 { font-size: 12pt; font-weight: bold; margin-top: 8px; margin-bottom: 4px; color: #e5c07b; } /* Yellow */
+h4 { font-size: 11pt; font-weight: bold; margin-top: 6px; margin-bottom: 3px; color: #e06c75;} /* Red */
+h5 { font-size: 10pt; font-weight: bold; margin-top: 5px; margin-bottom: 2px; color: #c678dd;} /* Magenta */
+h6 { font-size: 10pt; font-style: italic; margin-top: 5px; margin-bottom: 2px; color: #abb2bf;} /* Gray */
 
 /* Lists */
-QTextEdit ul, QTextEdit ol {
-    margin-left: 15px; /* Adjust indentation */
-    padding-left: 10px;
-    margin-top: 5px;
-    margin-bottom: 5px;
-}
-
-QTextEdit li {
-    margin-bottom: 4px;
-}
+ul, ol { margin-left: 5px; padding-left: 15px; margin-top: 5px; margin-bottom: 5px; } /* Adjusted margins */
+li { margin-bottom: 4px; }
 
 /* Blockquotes */
-QTextEdit blockquote {
-    border-left: 3px solid #5c6370;
-    margin: 8px 0px 8px 5px; /* Add vertical margin */
-    padding-left: 12px;
-    color: #9aabbf;
-    font-style: italic;
-}
+blockquote { border-left: 3px solid #5c6370; margin: 8px 0px 8px 5px; padding-left: 12px; color: #9aabbf; font-style: italic; }
 
 /* Horizontal Rule */
-QTextEdit hr {
-    border: 0;
-    height: 1px;
-    background-color: #555555;
-    margin: 15px 0; /* More vertical margin */
-}
+hr { border: 0; height: 1px; background-color: #555555; margin: 15px 0; }
 
 /* Tables */
-QTextEdit table {
-    border-collapse: collapse;
-    margin: 15px 0;
-    border: 1px solid #555555;
-    background-color: #313335; /* Table background */
-}
+table { border-collapse: collapse; margin: 15px 0; border: 1px solid #555555; background-color: #313335; width: auto; /* Don't force full width */ }
+th, td { border: 1px solid #555555; padding: 6px 10px; text-align: left; }
+th { background-color: #3c3f41; font-weight: bold; color: #dcdcdc; }
+td { color: #a9b7c6; }
 
-QTextEdit th, QTextEdit td {
-    border: 1px solid #555555;
-    padding: 6px 10px;
-    text-align: left;
-}
 
-QTextEdit th {
-    background-color: #3c3f41;
-    font-weight: bold;
-    color: #dcdcdc;
-}
-
-QTextEdit td {
-     color: #a9b7c6;
-}
+/* --- Bubble Container Styles REMOVED --- */
+/* QWidget[objectName$="BubbleContent"] { ... } */
+/* QWidget#UserBubbleContent { ... } */
+/* QWidget#AiBubbleContent { ... } */
+/* QWidget#SystemBubbleContent { ... } */
+/* QWidget#ErrorBubbleContent { ... } */
+/* QWidget[objectName$="BubbleContent"] QTextEdit#BubbleTextEdit { ... } */
+/* QWidget[objectName$="BubbleContent"] QLabel#BubbleImageLabel { ... } */

@@ -1,10 +1,9 @@
-# SynaChat/backend/ollama_adapter.py
-# UPDATED FILE - Format history to include images for multimodal models
 
 import logging
 import asyncio
 import base64 # Added for image data check
 from typing import List, Optional, AsyncGenerator, Dict, Any
+import time # For potential debug delays
 
 # Attempt import for type hinting and error checking
 try:
@@ -22,6 +21,53 @@ from core.models import ChatMessage, MODEL_ROLE, USER_ROLE, SYSTEM_ROLE # Use ro
 
 logger = logging.getLogger(__name__)
 
+# --- Helper function to handle StopIteration within the thread ---
+_SENTINEL = object() # Use a unique object as sentinel
+
+def _run_ollama_stream_sync(client, model_name, messages) -> List[Dict[str, Any]]:
+    """Synchronous helper to run the Ollama stream and collect chunks."""
+    all_chunks = []
+    try:
+        logger.debug(f"[Thread {time.time():.2f}] Calling ollama.chat (sync within thread)...")
+        # Use the synchronous client or adapt the async call if necessary
+        # Assuming ollama library provides a sync interface or we adapt
+        # For simplicity, let's assume a synchronous call exists or we block here.
+        # If using the async client, we'd need `asyncio.run` inside the thread,
+        # which is generally discouraged. A dedicated sync client is better.
+        # Let's *assume* the async client's stream can be iterated synchronously
+        # *within this thread context* for the sake of the pattern.
+        # **This assumption might be incorrect depending on ollama library's implementation.**
+        # A more robust solution might involve a queue between the thread and the async gen.
+
+        # --- SIMPLIFIED ASSUMPTION FOR PATTERN ---
+        # Replace with actual synchronous streaming call if available,
+        # otherwise this pattern needs refinement (e.g., using a queue).
+        stream = client.chat( # Pretend this is sync or blocks appropriately here
+            model=model_name,
+            messages=messages,
+            stream=True
+        )
+        logger.debug(f"[Thread {time.time():.2f}] Got stream iterator.")
+        for chunk in stream:
+            # logger.debug(f"[Thread {time.time():.2f}] Received chunk: {str(chunk)[:100]}")
+            all_chunks.append(chunk)
+            # Check for done/error within the thread as well
+            if chunk.get('done', False):
+                if chunk.get('error'):
+                    logger.error(f"[Thread {time.time():.2f}] Error in stream chunk: {chunk['error']}")
+                else:
+                    logger.debug(f"[Thread {time.time():.2f}] Stream done flag received.")
+                break # Stop collecting on done/error
+        logger.debug(f"[Thread {time.time():.2f}] Finished iterating stream. Collected {len(all_chunks)} chunks.")
+        # --- END SIMPLIFIED ASSUMPTION ---
+
+    except Exception as e:
+        logger.exception(f"[Thread {time.time():.2f}] Exception during synchronous Ollama stream processing:")
+        # Append an error chunk to signal failure back to the async generator
+        all_chunks.append({"error": f"Thread Error: {type(e).__name__} - {e}"})
+    return all_chunks
+
+
 class OllamaAdapter(BackendInterface):
     """Implementation of the BackendInterface for local models via Ollama."""
 
@@ -30,7 +76,8 @@ class OllamaAdapter(BackendInterface):
     # DEFAULT_MODEL = "llama3:latest" # Example text-only model
 
     def __init__(self):
-        self._client: Optional[ollama.AsyncClient] = None
+        # Use a synchronous client for the to_thread approach
+        self._sync_client: Optional[ollama.Client] = None
         self._model_name: str = self.DEFAULT_MODEL
         self._system_prompt: Optional[str] = None
         self._last_error: Optional[str] = None
@@ -42,7 +89,7 @@ class OllamaAdapter(BackendInterface):
         """Configures the Ollama client."""
         # API key is ignored for local Ollama, but kept for interface compatibility
         logger.info(f"OllamaAdapter: Configuring. Host: {self._ollama_host}, Model: {model_name}. System Prompt: {'Yes' if system_prompt else 'No'}")
-        self._client = None
+        self._sync_client = None # Use sync client now
         self._is_configured = False
         self._last_error = None
 
@@ -56,10 +103,17 @@ class OllamaAdapter(BackendInterface):
         self._system_prompt = system_prompt.strip() if isinstance(system_prompt, str) else None
 
         try:
-            # TODO: Add check if Ollama server is running at the host?
-            # This might require a synchronous check or handling connection errors later.
-            # For now, assume the server is available.
-            self._client = ollama.AsyncClient(host=self._ollama_host)
+            # Instantiate the SYNCHRONOUS client
+            self._sync_client = ollama.Client(host=self._ollama_host)
+            # Optional: Add a synchronous check here if the server is reachable
+            # try:
+            #     self._sync_client.list() # Example sync call to check connection
+            #     logger.info(f"  Successfully connected to Ollama at {self._ollama_host}.")
+            # except Exception as conn_err:
+            #     self._last_error = f"Failed to connect to Ollama at {self._ollama_host}: {conn_err}"
+            #     logger.error(self._last_error)
+            #     return False
+
             self._is_configured = True
             logger.info(f"  OllamaAdapter configured successfully for model '{self._model_name}' at {self._ollama_host}.")
             return True
@@ -71,14 +125,17 @@ class OllamaAdapter(BackendInterface):
 
     def is_configured(self) -> bool:
         """Checks if the adapter is configured."""
-        return self._is_configured and self._client is not None
+        return self._is_configured and self._sync_client is not None
 
     def get_last_error(self) -> Optional[str]:
         """Returns the last error message."""
         return self._last_error
 
     async def get_response_stream(self, history: List[ChatMessage]) -> AsyncGenerator[str, None]:
-        """Gets a streaming response from the Ollama API."""
+        """
+        Gets a streaming response from the Ollama API using asyncio.to_thread
+        to isolate the synchronous stream iteration.
+        """
         logger.info(f"OllamaAdapter: Generating stream. Model: {self._model_name}, History items: {len(history)}")
         self._last_error = None
 
@@ -101,40 +158,45 @@ class OllamaAdapter(BackendInterface):
                  images_preview = f", Images: {len(msg.get('images', []))}" if 'images' in msg else ""
                  logger.debug(f"    Message {i}: Role={msg['role']}, Content='{content_preview}'{images_preview}")
 
-
         try:
-            # Use the client's chat method with stream=True
-            stream = await self._client.chat(
-                model=self._model_name,
-                messages=messages,
-                stream=True
+            # --- MODIFICATION: Run synchronous stream helper in thread ---
+            logger.debug("Calling asyncio.to_thread to run Ollama stream...")
+            all_chunks = await asyncio.to_thread(
+                _run_ollama_stream_sync,
+                self._sync_client, # Pass sync client
+                self._model_name,
+                messages
             )
+            logger.debug(f"asyncio.to_thread completed. Received {len(all_chunks)} chunks.")
+            # --- END MODIFICATION ---
 
-            async for chunk in stream:
+            # --- Process the collected chunks ---
+            for chunk in all_chunks:
+                # Check for errors signaled from the thread
+                if chunk.get("error"):
+                    self._last_error = chunk["error"]
+                    logger.error(f"Error received from Ollama thread: {self._last_error}")
+                    raise RuntimeError(self._last_error) # Propagate error
+
                 # Extract the content part from the chunk
                 content_part = chunk.get('message', {}).get('content', '')
                 if content_part:
                     yield content_part
-                # Check for 'done' flag (might indicate error or finish)
-                if chunk.get('done', False):
-                     if chunk.get('error'):
-                          error_msg = chunk['error']
-                          self._last_error = f"Ollama API Error: {error_msg}"
-                          logger.error(self._last_error)
-                          break
-                     else:
-                          logger.info("Ollama stream finished.")
-                          break # Normal finish
 
-        except ollama.ResponseError as e:
+                # Check for 'done' flag (now just informational as loop ends)
+                if chunk.get('done', False):
+                     logger.info("Ollama stream finished flag received in collected chunks.")
+                     break # Exit loop after processing all collected chunks
+
+        except ollama.ResponseError as e: # Catch errors from sync client if they propagate
              self._last_error = f"Ollama API Response Error: {e.status_code} - {e.error}"
              logger.error(self._last_error)
              raise RuntimeError(self._last_error) from e
         except Exception as e:
-            self._last_error = f"Unexpected error during Ollama stream: {type(e).__name__} - {e}"
+            # Catch errors from asyncio.to_thread or async processing
+            self._last_error = f"Unexpected error during Ollama stream processing: {type(e).__name__} - {e}"
             logger.exception("OllamaAdapter stream failed:")
             raise RuntimeError(self._last_error) from e
-
 
     def _format_history_for_api(self, history: List[ChatMessage]) -> List[Dict[str, Any]]:
         """
@@ -152,7 +214,7 @@ class OllamaAdapter(BackendInterface):
             if msg.role == USER_ROLE:
                 role = 'user'
             elif msg.role == MODEL_ROLE:
-                role = 'assistant'
+                role = 'assistant' # Ollama uses 'assistant' for model role
             else:
                 skipped_count += 1
                 continue

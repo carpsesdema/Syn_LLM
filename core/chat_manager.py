@@ -1,5 +1,3 @@
-# SynaChat/core/chat_manager.py
-# UPDATED FILE - Accept image data in process_user_message
 
 import logging
 import asyncio
@@ -35,18 +33,20 @@ class ChatManager(QObject):
     """
     Manages the application's core logic, state, and coordinates
     interactions between UI, Backend, Services (including RAG via UploadService).
+    Emits signals that MainWindow adapts to update the ChatListModel.
     """
 
     # --- Signals for UI Communication ---
-    history_changed = pyqtSignal(list)
-    new_message_added = pyqtSignal(object)
+    # These signals remain the same; MainWindow adapts their handling
+    history_changed = pyqtSignal(list) # Carries List[ChatMessage]
+    new_message_added = pyqtSignal(object) # Carries ChatMessage
     status_update = pyqtSignal(str, str, bool, int)
     error_occurred = pyqtSignal(str, bool)
     busy_state_changed = pyqtSignal(bool)
     config_state_changed = pyqtSignal(str, bool)
-    stream_chunk_received = pyqtSignal(str)
+    stream_chunk_received = pyqtSignal(str) # Carries chunk str
     stream_finished = pyqtSignal()
-    stream_started = pyqtSignal(str)
+    stream_started = pyqtSignal(str) # Carries role str
 
     # --- Technical Keywords for RAG Triggering ---
     # Adjusted set - more specific, includes regex patterns needing re.search
@@ -118,8 +118,8 @@ class ChatManager(QObject):
                  logger.error("UploadService does not have is_vector_db_ready method. Cannot check RAG status.")
                  self._vector_db_initialized = False
 
-
-            self.history_changed.emit(self._conversation_history)
+            # Emit history_changed for MainWindow to load into the model
+            self.history_changed.emit(self._conversation_history[:]) # Send a copy
             self.config_state_changed.emit(self._current_model_name, bool(self._current_personality_prompt))
             self.update_status_based_on_state()
 
@@ -127,11 +127,12 @@ class ChatManager(QObject):
             logger.exception("Error during ChatManager initialization:")
             self.error_occurred.emit(f"Initialization failed: {e}", True)
             self._conversation_history = []
-            self.history_changed.emit(self._conversation_history)
+            self.history_changed.emit(self._conversation_history[:]) # Send empty list
             self.update_status_based_on_state()
 
     def _get_default_model_for_backend(self) -> str:
         """Returns a sensible default model name based on the backend type, prioritizing constants."""
+        # (No changes needed here)
         backend_class_name = type(self._backend).__name__
         logger.debug(f"Determining default model for backend: {backend_class_name}")
         if "OllamaAdapter" in backend_class_name:
@@ -146,6 +147,7 @@ class ChatManager(QObject):
 
     def _configure_backend(self) -> bool:
         """Configures or re-configures the backend adapter."""
+        # (No changes needed here)
         api_key = get_api_key() if "Gemini" in type(self._backend).__name__ else None
         logger.info(f"Attempting backend config. Backend: {type(self._backend).__name__}, Model: {self._current_model_name}, Key Needed: {bool(api_key)}")
         self._api_configured_successfully = self._backend.configure(api_key=api_key, model_name=self._current_model_name, system_prompt=self._current_personality_prompt)
@@ -156,6 +158,7 @@ class ChatManager(QObject):
 
     def update_status_based_on_state(self):
         """Emits a status update based on the current configuration and busy state."""
+        # (No changes needed here)
         if self._is_busy: self.status_update.emit("AI responding...", "#e5c07b", False, 0)
         elif not self._api_configured_successfully:
             err = self._backend.get_last_error() or "Config failed."
@@ -172,6 +175,7 @@ class ChatManager(QObject):
 
     def set_model(self, model_name: str):
         """Sets a new model and reconfigures the backend."""
+        # (No changes needed here)
         logger.info(f"Model selection changed to: {model_name}")
         if model_name == self._current_model_name: return
         self._current_model_name = model_name
@@ -181,6 +185,7 @@ class ChatManager(QObject):
 
     def set_personality(self, prompt: Optional[str]):
         """Sets a new personality prompt and reconfigures the backend."""
+        # (No changes needed here)
         logger.info(f"Personality update requested. New: {'Set' if prompt else 'None'}")
         new_prompt_norm = prompt.strip() if prompt else None
         if new_prompt_norm == self._current_personality_prompt: return
@@ -196,7 +201,7 @@ class ChatManager(QObject):
         self._cancel_backend_task()
         self._conversation_history = []
         self._current_session_filepath = None
-        self.history_changed.emit(self._conversation_history)
+        self.history_changed.emit(self._conversation_history[:]) # Emit empty list copy
         self._session_service.clear_last_session_file()
         self.update_status_based_on_state()
         logger.info("New chat session started.")
@@ -211,16 +216,18 @@ class ChatManager(QObject):
             self._conversation_history = history; self._current_personality_prompt = personality; self._current_model_name = model if model else self._get_default_model_for_backend(); self._current_session_filepath = filepath
             logger.info(f"Session loaded. M: {self._current_model_name}, P: {'Set' if personality else 'None'}, H: {len(history)}")
             self._configure_backend()
-            self.history_changed.emit(self._conversation_history); self.config_state_changed.emit(self._current_model_name, bool(self._current_personality_prompt))
+            self.history_changed.emit(self._conversation_history[:]) # Emit loaded history copy
+            self.config_state_changed.emit(self._current_model_name, bool(self._current_personality_prompt))
             self.status_update.emit(f"Session '{os.path.basename(filepath)}' loaded.", "#98c379", True, 4000)
             self._save_current_state_to_last_session()
         except Exception as e: logger.exception(f"Error loading session {filepath}:"); self.error_occurred.emit(f"Failed load session {os.path.basename(filepath)}: {e}", False)
 
     def save_current_chat_session(self, filepath: str) -> bool:
         """Saves the current chat session to a file."""
+        # (No changes needed here)
         logger.info(f"Saving current chat session to: {filepath}")
         try:
-            history_to_save = [msg for msg in self._conversation_history if not msg.metadata or not (msg.metadata.get("is_rag_context") or msg.metadata.get("is_rag_augmented"))]
+            history_to_save = [msg for msg in self._conversation_history if msg.role in [USER_ROLE, MODEL_ROLE]] # Save only user/model roles
             success, final_path = self._session_service.save_session(filepath=filepath, history=history_to_save, model_name=self._current_model_name, personality=self._current_personality_prompt)
             if success and final_path:
                 self._current_session_filepath = final_path; self.status_update.emit(f"Session saved as '{os.path.basename(final_path)}'.", "#98c379", True, 4000); self._save_current_state_to_last_session(); return True
@@ -228,9 +235,11 @@ class ChatManager(QObject):
         except Exception as e: logger.exception(f"Error saving session {filepath}:"); self.error_occurred.emit(f"Error saving: {os.path.basename(filepath)}: {e}", False); return False
 
     def list_saved_sessions(self) -> List[str]:
+         # (No changes needed here)
          return self._session_service.list_sessions()
 
     def delete_chat_session(self, filepath: str) -> bool:
+         # (No changes needed here)
          logger.info(f"Request to delete session: {filepath}")
          success = self._session_service.delete_session(filepath)
          if success:
@@ -241,6 +250,7 @@ class ChatManager(QObject):
 
     def handle_file_upload(self, file_paths: List[str]):
         """Processes uploaded files using UploadService (for RAG DB)."""
+        # (No changes needed here, emits SYSTEM message)
         logger.info(f"Handling file upload for RAG DB: {len(file_paths)} files.")
         if self._is_busy: self.status_update.emit("Cannot upload while AI busy.", "#e5c07b", True, 3000); return
         if not isinstance(self._upload_service, UploadService) or not hasattr(self._upload_service, 'process_files_for_context'):
@@ -249,7 +259,9 @@ class ChatManager(QObject):
             return
         summary_message = self._upload_service.process_files_for_context(file_paths)
         if summary_message:
-            self._add_message_to_history(summary_message); self._save_current_state_to_last_session()
+            self._add_message_to_history(summary_message) # Add to internal history
+            self.new_message_added.emit(summary_message)   # Emit for display
+            self._save_current_state_to_last_session() # Save state after potential RAG DB update
             if hasattr(self._upload_service, 'is_vector_db_ready') and callable(self._upload_service.is_vector_db_ready):
                  rag_status_after = self._upload_service.is_vector_db_ready()
                  if rag_status_after != self._vector_db_initialized: self._vector_db_initialized = rag_status_after; self.update_status_based_on_state(); self.config_state_changed.emit(self._current_model_name, bool(self._current_personality_prompt))
@@ -258,6 +270,7 @@ class ChatManager(QObject):
 
     def handle_directory_upload(self, dir_path: str):
         """Processes an uploaded directory using UploadService (for RAG DB)."""
+        # (No changes needed here, emits SYSTEM message)
         logger.info(f"Handling directory upload for RAG DB: {dir_path}")
         if self._is_busy: self.status_update.emit("Cannot upload while AI busy.", "#e5c07b", True, 3000); return
         if not isinstance(self._upload_service, UploadService) or not hasattr(self._upload_service, 'process_directory_for_context'):
@@ -268,7 +281,9 @@ class ChatManager(QObject):
         summary_message = self._upload_service.process_directory_for_context(dir_path)
         self.update_status_based_on_state() # Clear scanning message
         if summary_message:
-             self._add_message_to_history(summary_message); self._save_current_state_to_last_session()
+             self._add_message_to_history(summary_message) # Add to internal history
+             self.new_message_added.emit(summary_message)   # Emit for display
+             self._save_current_state_to_last_session()
              if hasattr(self._upload_service, 'is_vector_db_ready') and callable(self._upload_service.is_vector_db_ready):
                  rag_status_after = self._upload_service.is_vector_db_ready()
                  if rag_status_after != self._vector_db_initialized: self._vector_db_initialized = rag_status_after; self.update_status_based_on_state(); self.config_state_changed.emit(self._current_model_name, bool(self._current_personality_prompt))
@@ -278,37 +293,25 @@ class ChatManager(QObject):
     # --- Helper to determine if RAG should be performed ---
     def _should_perform_rag(self, query: str) -> bool:
         """Checks if the query likely requires RAG based on keywords and structure."""
-        # Ensure RAG is initialized globally first
+        # (No changes needed here)
         if not hasattr(self, '_vector_db_initialized') or not self._vector_db_initialized:
             return False # Cannot perform RAG if DB isn't ready
-
         query_lower = query.lower().strip()
-
-        # 1. Check for simple greetings or very short inputs
         if len(query) < 20 and self._GREETING_PATTERNS.match(query_lower):
             logger.debug(f"Query '{query[:30]}...' looks like a short greeting, skipping RAG.")
             return False
         if len(query) < 10: # Very short, less likely technical
              logger.debug(f"Query '{query[:30]}...' too short, likely chat, skipping RAG.")
              return False
-
-        # 2. Check for explicit code fences
         if self._CODE_FENCE_PATTERN.search(query):
              logger.debug(f"Query contains code fences, performing RAG.")
              return True
-
-        # 3. Check for technical keywords
         if any(keyword in query_lower for keyword in self._TECHNICAL_KEYWORDS):
             logger.debug(f"Query '{query[:30]}...' contains technical keyword, performing RAG.")
             return True
-
-        # 4. Check for code-like syntax patterns (optional, can be broad)
-        # Example: presence of underscore, dot, parentheses - adjust as needed
         if re.search(r"[_.(]", query) and len(query) > 15:
              logger.debug(f"Query '{query[:30]}...' contains code-like characters, performing RAG.")
              return True
-
-        # 5. Default: Assume chat, skip RAG
         logger.debug(f"Query '{query[:30]}...' doesn't strongly suggest technical content, skipping RAG.")
         return False
 
@@ -319,240 +322,263 @@ class ChatManager(QObject):
         conditionally retrieves RAG context, triggers backend.
         """
         logger.info("Processing user message...")
-        if self._is_busy: logger.warning("Attempted send while busy."); return
-        if not self._api_configured_successfully: logger.error("Cannot send, API not configured."); return
+        if self._is_busy:
+            logger.warning("Attempted send while busy.")
+            self.status_update.emit("AI is busy, please wait.", "#e5c07b", True, 2000) # Notify user
+            return
+        if not self._api_configured_successfully:
+            logger.error("Cannot send, API not configured.")
+            self.error_occurred.emit("API not configured. Cannot send message.", False) # Notify user
+            return
 
         user_query_text = text.strip()
         image_data_list = image_data or []
 
-        # Must have either text or images
-        if not user_query_text and not image_data_list:
-            logger.warning("Attempted send empty message (no text or images)."); return
+        if not user_query_text and not image_data_list: logger.warning("Attempted send empty message (no text or images)."); return
 
-        # --- Construct message parts ---
         message_parts = []
-        if user_query_text:
-            message_parts.append(user_query_text)
+        if user_query_text: message_parts.append(user_query_text)
         if image_data_list:
-            # Validate image data structure minimally
             valid_image_data = [img for img in image_data_list if isinstance(img, dict) and img.get("type") == "image" and img.get("data")]
-            if valid_image_data:
-                 message_parts.extend(valid_image_data)
-                 logger.info(f"Including {len(valid_image_data)} images in user message.")
-            else:
-                 logger.warning("Image data list provided but contained no valid image dictionaries.")
+            if valid_image_data: message_parts.extend(valid_image_data); logger.info(f"Including {len(valid_image_data)} images in user message.")
+            else: logger.warning("Image data list provided but contained no valid image dictionaries.")
 
-        # --- Add User Message to History ---
-        user_message = ChatMessage(role=USER_ROLE, parts=message_parts)
-        self._add_message_to_history(user_message) # Ensures user message always appears
+        # --- Add User Message to History & Emit ---
+        try:
+            user_message = ChatMessage(role=USER_ROLE, parts=message_parts)
+            self._add_message_to_history(user_message) # Add to internal history
+            self.new_message_added.emit(user_message) # Emit for display via model
+            logger.debug("User message added to history and signaled for display.")
+        except Exception as e_add:
+            logger.exception("Failed to create or add user message"); self.error_occurred.emit(f"Error processing your message: {e_add}", False); return
 
-        # --- Conditional RAG (based on TEXT part only for now) ---
-        rag_context_str = ""
-        perform_rag = self._should_perform_rag(user_query_text) if user_query_text else False # Only RAG on text
+        # --- Conditional RAG ---
+        rag_context_str = ""; rag_info_msg = None
+        perform_rag = self._should_perform_rag(user_query_text) if user_query_text else False
 
         if perform_rag:
             logger.info("Attempting RAG retrieval...")
-            # (RAG retrieval logic remains the same as before)
             try:
-                if not isinstance(self._upload_service, UploadService) or not hasattr(self._upload_service, 'query_vector_db'):
-                     raise TypeError("UploadService not valid or missing 'query_vector_db'.")
+                if not isinstance(self._upload_service, UploadService) or not hasattr(self._upload_service, 'query_vector_db'): raise TypeError("UploadService not valid or missing 'query_vector_db'.")
                 relevant_chunks = self._upload_service.query_vector_db(user_query_text, n_results=constants.RAG_NUM_RESULTS)
                 if relevant_chunks:
-                    context_parts = []
-                    retrieved_chunks_details = []
+                    context_parts = []; retrieved_chunks_details = []
                     for i, chunk in enumerate(relevant_chunks):
-                        metadata = chunk.get("metadata", {})
-                        if not isinstance(metadata, dict): continue
-                        filename = metadata.get("filename", "unknown_source")
-                        code_content = chunk.get("content", "")
+                        metadata = chunk.get("metadata", {}); filename = metadata.get("filename", "unknown_source"); code_content = chunk.get("content", "")
                         context_parts.append(f"--- Snippet {i+1} from `{filename}` ---\n```python\n{code_content}\n```\n")
                         retrieved_chunks_details.append(f"{filename} (dist: {chunk.get('distance', -1):.4f})")
                     rag_context_str = ("--- Relevant Code Context Start ---\n" + "\n".join(context_parts) + "--- Relevant Code Context End ---")
                     logger.info(f"Retrieved {len(relevant_chunks)} chunks for RAG: [{', '.join(retrieved_chunks_details)}]")
+                    rag_info_msg = ChatMessage(role=SYSTEM_ROLE, parts=["[RAG context added to prompt (not shown)]"], metadata={"is_internal": True})
                 else: logger.info("No relevant RAG context found for technical query.")
             except Exception as e_rag:
                 logger.exception("Error retrieving RAG context:")
-                self._add_system_message_to_display("[Error retrieving RAG context]")
+                rag_info_msg = ChatMessage(role=ERROR_ROLE, parts=["[Error retrieving RAG context]"], metadata={"is_internal": True})
                 rag_context_str = ""
-        else:
-            logger.info("Skipping RAG based on user query analysis or lack of text.")
-        # --- End Conditional RAG ---
+        else: logger.info("Skipping RAG based on user query analysis or lack of text.")
+
+        # --- Emit RAG Info Message (if any) ---
+        if rag_info_msg:
+            self._add_message_to_history(rag_info_msg) # Add to internal history
+            self.new_message_added.emit(rag_info_msg)   # Emit for display
 
         # --- Prepare history and final prompt for backend ---
-        history_for_backend = list(self._conversation_history) # Copy current history
+        history_for_backend = [msg for msg in self._conversation_history if msg.role in [USER_ROLE, MODEL_ROLE] and (not msg.metadata or not msg.metadata.get("is_internal"))]
         final_prompt_message: Optional[ChatMessage] = None
 
-        if rag_context_str: # RAG was performed and found context
-            # Create a combined text prompt including RAG context
-            prompt_template = (
-                "Okay, SynapseChat. Based on the user's request: '{query}', consider these relevant snippets "
-                "from their existing code:\n\n{context}\n\nUse these snippets to ensure consistency "
-                "with existing patterns, variable names, and functions. Generate the Python code "
-                "needed to fulfill the request, integrating it logically with the provided context."
-            )
+        if rag_context_str:
+            prompt_template = ("Okay, SynapseChat. Based on the user's request: '{query}', consider these relevant snippets from their existing code:\n\n{context}\n\nUse these snippets to ensure consistency with existing patterns, variable names, and functions. Generate the Python code needed to fulfill the request, integrating it logically with the provided context.")
             augmented_text = prompt_template.format(context=rag_context_str, query=user_query_text)
             logger.debug(f"Augmented prompt created. Length: {len(augmented_text)}")
-
-            # Construct parts for the final message, including images if they exist
-            final_parts = [augmented_text]
-            if image_data_list:
-                final_parts.extend(image_data_list) # Append original image data
-
-            # Create the augmented ChatMessage object
+            final_parts = [augmented_text];
+            if image_data_list: final_parts.extend(image_data_list)
             final_prompt_message = ChatMessage(role=USER_ROLE, parts=final_parts, metadata={"is_rag_augmented": True})
-
-            # Replace the last message (original user query) in the history to be sent
-            if history_for_backend: history_for_backend[-1] = final_prompt_message
+            if history_for_backend: history_for_backend[-1] = final_prompt_message # Replace last user msg
             else: logger.error("History empty when trying to replace with augmented prompt!"); return
-        else: # No RAG context was added
-            # Use the original user message (which includes text and/or images)
+        else:
             if not history_for_backend: logger.error("History is empty after adding user message, cannot proceed."); return
             final_prompt_message = history_for_backend[-1]
 
         # --- Trigger backend request ---
-        if final_prompt_message: # Ensure we have something to send
+        if final_prompt_message:
             self._set_busy_state(True)
+            logger.info("Creating backend response task...")
             self._current_backend_task = asyncio.create_task(self._get_backend_response(history_for_backend))
-        else:
-             logger.error("Could not determine final prompt message. Aborting backend request.")
+        else: logger.error("Could not determine final prompt message. Aborting backend request."); self._set_busy_state(False)
 
-    # --- _get_backend_response, _add_message_to_history, etc. remain the same ---
-    # (Ensure _get_backend_response uses the modified history_for_backend)
 
     async def _get_backend_response(self, history_to_send: List[ChatMessage]):
         """Internal async method to handle the backend streaming call."""
         logger.info("Starting backend response task...")
-        response_buffer = ""
         streaming_started = False
-        model_message: Optional[ChatMessage] = None # To store the final message object
+        stream_iterator = None
+        response_buffer = ""
+        model_message_added = False # Track if placeholder was added
 
         try:
-            if not hasattr(self._backend, 'get_response_stream'):
-                raise AttributeError("Backend has no get_response_stream method")
+            if not hasattr(self._backend, 'get_response_stream'): raise AttributeError("Backend has no get_response_stream method")
 
-            # --- Pass the potentially modified history ---
+            logger.info(f"Calling backend stream with {len(history_to_send)} messages.")
             stream_iterator = self._backend.get_response_stream(history_to_send)
-            # ---------------------------------------------
 
-            async for chunk in stream_iterator:
-                if not streaming_started:
-                    self.stream_started.emit(MODEL_ROLE) # Signal UI to create bubble
-                    streaming_started = True
-                response_buffer += chunk
-                self.stream_chunk_received.emit(chunk) # Signal UI to append chunk
+            try:
+                async for chunk in stream_iterator:
+                    if not streaming_started:
+                        logger.debug("Stream started, emitting signal.")
+                        # Emit stream_started signal - MainWindow will add placeholder to model
+                        self.stream_started.emit(MODEL_ROLE)
+                        streaming_started = True
+                        # Wait briefly to allow placeholder creation? Might not be needed.
+                        # await asyncio.sleep(0.01)
+                    response_buffer += chunk
+                    # Emit chunk - MainWindow will append to model's last message
+                    self.stream_chunk_received.emit(chunk)
+                logger.info("Stream iterator finished normally.")
+            finally:
+                 if stream_iterator and hasattr(stream_iterator, 'aclose'):
+                     try: await stream_iterator.aclose(); logger.debug("Stream iterator aclosed().")
+                     except Exception as e_aclose: logger.warning(f"Error during stream iterator aclose(): {e_aclose}")
+                 else: logger.debug("Stream iterator is None or has no aclose() method.")
 
+            # --- Process after successful stream completion ---
             if streaming_started:
-                self.stream_finished.emit() # Signal UI to finalize bubble
-
-            # --- Logic from previous fix (seems correct now) ---
-            if response_buffer:
-                model_message = ChatMessage(role=MODEL_ROLE, parts=[response_buffer.strip()])
-                self._conversation_history.append(model_message)
-                if not streaming_started:
-                    logger.warning("Stream did not start, but buffer has content. Emitting new_message_added signal.")
-                    self.new_message_added.emit(model_message)
-                else:
-                    logger.info(f"Backend response processed (streamed). Length: {len(response_buffer)}. Added internally to history. Signal skipped.")
-                self._save_current_state_to_last_session()
-            elif streaming_started:
-                logger.warning("Stream finished empty.")
-                self._add_system_message_to_display("[AI stream finished empty]")
+                logger.debug("Stream finished, emitting signal.")
+                # Emit finished - MainWindow will finalize model's last message
+                self.stream_finished.emit()
+                # Add final message to internal history AFTER stream signals
+                # The actual message data is already updated in the model by MainWindow
+                # We just need to add the *final* ChatMessage object to our internal history
+                if response_buffer:
+                     final_message = ChatMessage(role=MODEL_ROLE, parts=[response_buffer.strip()])
+                     # Check if last message in history is the streaming one and update it
+                     if self._conversation_history and self._conversation_history[-1].role == MODEL_ROLE and self._conversation_history[-1].metadata.get("is_streaming"):
+                          self._conversation_history[-1] = final_message # Replace placeholder
+                          logger.debug("Updated internal history with final streamed message.")
+                     else: # Fallback: append if placeholder wasn't tracked correctly
+                          self._conversation_history.append(final_message)
+                          logger.warning("Appended final streamed message, placeholder might not have been tracked.")
+                     self._save_current_state_to_last_session()
+                     logger.info(f"Streamed AI response finalized in internal history. Length: {len(response_buffer)}")
+                else: logger.warning("Stream finished, but response buffer was empty.")
             else:
-                logger.warning("Backend returned no response chunks and stream didn't start.")
-                self._add_system_message_to_display("[AI returned empty response]")
-            # --- End logic from previous fix ---
+                # Handle non-streaming response or error before stream start
+                if response_buffer:
+                    logger.warning("Backend returned content but stream didn't start. Adding as complete message.")
+                    model_message = ChatMessage(role=MODEL_ROLE, parts=[response_buffer.strip()])
+                    self._add_message_to_history(model_message) # Add to internal history
+                    self.new_message_added.emit(model_message)  # Emit for display
+                else:
+                    logger.warning("Backend returned no response chunks and stream didn't start.")
+                    backend_error = self._backend.get_last_error()
+                    if backend_error:
+                        error_msg_obj = ChatMessage(role=ERROR_ROLE, parts=[f"Error: {backend_error}"], metadata={"is_internal": True})
+                        self._add_message_to_history(error_msg_obj)
+                        self.new_message_added.emit(error_msg_obj)
+                    else:
+                        sys_msg_obj = ChatMessage(role=SYSTEM_ROLE, parts=["[AI returned empty response or failed before streaming]"], metadata={"is_internal": True})
+                        self._add_message_to_history(sys_msg_obj)
+                        self.new_message_added.emit(sys_msg_obj)
 
         except asyncio.CancelledError:
-            logger.info("Backend task cancelled.")
-            if streaming_started:
-                self.stream_finished.emit()
-            self._add_system_message_to_display("[AI response cancelled by user]")
+            logger.info("Backend task explicitly cancelled.")
+            if streaming_started: self.stream_finished.emit() # Ensure UI finalizes model message
+            cancel_msg = ChatMessage(role=SYSTEM_ROLE, parts=["[AI response cancelled by user]"], metadata={"is_internal": True})
+            self._add_message_to_history(cancel_msg)
+            self.new_message_added.emit(cancel_msg)
 
         except Exception as e:
-            logger.exception("Error during backend response streaming:")
-            if streaming_started:
-                self.stream_finished.emit()
-            error_msg = self._backend.get_last_error() or f"Stream Error: {type(e).__name__}"
-            self._add_system_message_to_display(f"Error: {error_msg}")
-            self.error_occurred.emit(error_msg, False)
+            logger.exception("Error during backend response task:")
+            if streaming_started: self.stream_finished.emit() # Ensure UI finalizes model message
+            error_msg = self._backend.get_last_error() or f"Task Error: {type(e).__name__}"
+            error_msg_obj = ChatMessage(role=ERROR_ROLE, parts=[f"Error: {error_msg}"], metadata={"is_internal": True})
+            self._add_message_to_history(error_msg_obj)
+            self.new_message_added.emit(error_msg_obj)
 
         finally:
-            logger.info("Backend response task finished.")
-            self._set_busy_state(False)
-            self._current_backend_task = None
-
+            logger.info("Backend response task finishing (outer finally block).")
+            if self._current_backend_task is asyncio.current_task():
+                 self._set_busy_state(False); self._current_backend_task = None; logger.info("Busy state reset by the finishing task.")
+            else: logger.warning("Task finished, but it's not the current task. Busy state not reset here.")
 
     def _add_message_to_history(self, message: ChatMessage):
-        """Appends a message to the internal history and emits signal, skipping RAG prompts for persistence."""
-        if message.metadata and (message.metadata.get("is_rag_context") or message.metadata.get("is_rag_augmented")):
-             logger.debug("Skipping addition of RAG context/augmented message to persistent history.")
-             # Even though we skip persistent history, still signal UI to display it if it's RAG context
-             if message.metadata.get("is_rag_context"):
-                  self.new_message_added.emit(message)
-             return
-
-        # Don't add augmented prompt text to history, only original user message
-        if message.metadata and message.metadata.get("is_rag_augmented"):
-            logger.debug("Skipping augmented RAG prompt addition to history.")
-            return
-
+        """Appends a message to internal history. Saves state if user/model."""
+        # Simplified: Just add to internal history. Emitting is handled separately.
         self._conversation_history.append(message)
-        self.new_message_added.emit(message) # Notify UI
+        logger.debug(f"Added message (Role: {message.role}) to internal history (size: {len(self._conversation_history)})")
+        # Save state only after adding user/model messages (or errors/system?)
+        if message.role in [USER_ROLE, MODEL_ROLE, SYSTEM_ROLE, ERROR_ROLE]:
+             self._save_current_state_to_last_session()
 
-
-    def _add_system_message_to_display(self, text: str):
-        """Adds a system message FOR DISPLAY ONLY (not added to history sent to API)."""
-        logger.info(f"System message: {text}")
-        system_message = ChatMessage(role=SYSTEM_ROLE, parts=[text])
-        self.new_message_added.emit(system_message)
+    # Methods below are less critical now as MainWindow handles display via model signals
+    # def _add_system_message_to_display(self, text: str): ...
+    # def _add_error_message_to_history_and_display(self, text: str): ...
 
     def _set_busy_state(self, is_busy: bool):
         """Updates the busy state and emits signal."""
-        if self._is_busy != is_busy: self._is_busy = is_busy; self.busy_state_changed.emit(is_busy); self.update_status_based_on_state()
+        # (No changes needed here)
+        if self._is_busy != is_busy:
+            self._is_busy = is_busy
+            logger.debug(f"Setting busy state: {is_busy}")
+            self.busy_state_changed.emit(is_busy)
+            self.update_status_based_on_state() # Also update status bar text
 
     def _save_current_state_to_last_session(self):
-        """Helper to save the current state to the last session file."""
-        history_to_save = [msg for msg in self._conversation_history if not msg.metadata or not (msg.metadata.get("is_rag_context") or msg.metadata.get("is_rag_augmented"))]
-        self._session_service.save_last_session(model_name=self._current_model_name, personality=self._current_personality_prompt, history=history_to_save)
+        """Helper to save the current state (user/model messages) to the last session file."""
+        # Filter history based on role before saving - Keep SYSTEM/ERROR messages in history? Maybe not for save.
+        history_to_save = [msg for msg in self._conversation_history if msg.role in [USER_ROLE, MODEL_ROLE]]
+        self._session_service.save_last_session(
+            model_name=self._current_model_name,
+            personality=self._current_personality_prompt,
+            history=history_to_save
+        )
+        logger.debug("Saved current state (User/Model) to last session file.")
+
 
     def _cancel_backend_task(self):
         """Cancels the currently running backend task, if any."""
-        if self._current_backend_task and not self._current_backend_task.done(): logger.info("Cancelling ongoing backend task..."); self._current_backend_task.cancel()
+        # (No changes needed here)
+        if self._current_backend_task and not self._current_backend_task.done():
+            logger.info("Cancelling ongoing backend task...")
+            self._current_backend_task.cancel()
+            logger.debug("Cancellation requested for backend task.")
+
 
     def cleanup(self):
          """Perform cleanup actions before application exit."""
-         logger.info("ChatManager performing cleanup..."); self._cancel_backend_task(); self._save_current_state_to_last_session(); logger.info("ChatManager cleanup complete.")
+         # (No changes needed here)
+         logger.info("ChatManager performing cleanup...");
+         self._cancel_backend_task();
+         self._save_current_state_to_last_session()
+         logger.info("ChatManager cleanup complete.")
 
     # --- Getters ---
     def get_current_history(self) -> List[ChatMessage]:
-        return [msg for msg in self._conversation_history if not msg.metadata or not (msg.metadata.get("is_rag_context") or msg.metadata.get("is_rag_augmented"))]
+        # Return a copy of the internal history
+        return self._conversation_history[:]
 
     def get_current_model(self) -> str:
+         # (No changes needed here)
          return self._current_model_name
 
     def get_current_personality(self) -> Optional[str]:
+         # (No changes needed here)
          return self._current_personality_prompt
 
     def is_api_ready(self) -> bool:
+         # (No changes needed here)
          return self._api_configured_successfully
 
     def is_rag_active(self) -> bool:
+        # (No changes needed here)
         return hasattr(self, '_vector_db_initialized') and self._vector_db_initialized
 
-    # --- ADDED ---
     def get_rag_contents(self) -> List[Dict[str, Any]]:
-        """
-        Retrieves all metadata entries from the RAG vector database.
-
-        Returns:
-            A list of metadata dictionaries, or an empty list if the
-            VectorDBService is not available or ready.
-        """
+        """Retrieves all metadata entries from the RAG vector database."""
+        # (No changes needed here)
         if not self._vector_db_service or not self._vector_db_service.is_ready():
             logger.warning("Cannot get RAG contents: VectorDBService not available or not ready.")
             return []
         try:
-            # Ensure VectorDBService exists and has the method before calling
             if hasattr(self._vector_db_service, 'get_all_metadata') and callable(self._vector_db_service.get_all_metadata):
                 return self._vector_db_service.get_all_metadata()
             else:
@@ -561,4 +587,3 @@ class ChatManager(QObject):
         except Exception as e:
             logger.exception("Error retrieving RAG contents from VectorDBService:")
             return []
-    # -----------

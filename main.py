@@ -1,4 +1,3 @@
-
 import sys
 import os
 import traceback
@@ -47,7 +46,9 @@ except ImportError as e:
 
 # --- Setup Logging ---
 log_level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
-logging.basicConfig(level=log_level, format=LOG_FORMAT, handlers=[logging.StreamHandler()]) # Log to console only
+# --- MODIFIED: Added force=True ---
+logging.basicConfig(level=log_level, format=LOG_FORMAT, handlers=[logging.StreamHandler()], force=True)
+# --- END MODIFICATION ---
 logger = logging.getLogger(__name__)
 
 # --- Async Main Function ---

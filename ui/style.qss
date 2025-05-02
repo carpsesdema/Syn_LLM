@@ -46,19 +46,27 @@ QSplitter::handle:hover {
     background-color: #4b6eaf; /* Accent color on hover */
 }
 
-/* --- Scroll Area & Viewport --- */
-QScrollArea {
-    background-color: transparent; /* Inherit background */
-    border: none;
+/* --- Chat List View --- */
+#ChatListView {
+    background-color: #2b2b2b; /* Match main background */
+    border: none; /* No border around the list view itself */
+    outline: 0; /* Remove focus outline */
 }
 
-#ChatScrollArea > QWidget > QWidget#ScrollContentContainer {
-    background-color: #2b2b2b; /* Ensure scroll area viewport matches main background */
-}
+/* Style for items *within* the list view (optional, delegate controls most) */
+/* QListView::item { */
+    /* border: none; */ /* Delegate handles drawing, no border needed here */
+    /* padding: 0px; */ /* Delegate handles padding */
+/* } */
 
-#ChatWidgetContainer {
-    background-color: transparent; /* Let the container manage the color */
-}
+/* QListView::item:selected { */
+    /* background-color: transparent; */ /* Delegate handles selection drawing */
+/* } */
+
+/* --- Scroll Area & Viewport (REMOVED - No longer used for chat) --- */
+/* QScrollArea { ... } */
+/* #ChatScrollArea > QWidget > QWidget#ScrollContentContainer { ... } */
+/* #ChatWidgetContainer { ... } */
 
 /* --- Buttons --- */
 QPushButton {
@@ -108,6 +116,25 @@ QPushButton:disabled {
     padding: 5px 15px; /* Adjust padding for send button */
 }
 
+#AttachButton { /* Style the attach button */
+    padding: 3px; /* Minimal padding */
+    border-radius: 13px; /* Make it round */
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    background-color: #353739;
+    border: 1px solid #484848;
+}
+#AttachButton:hover {
+    background-color: #424548;
+    border-color: #585858;
+}
+#AttachButton:pressed {
+     background-color: #3e4143;
+}
+
+
 /* --- Input Fields --- */
 QLineEdit {
     background-color: #3c3f41;
@@ -154,12 +181,6 @@ QComboBox::drop-down {
     background-color: #3c3f41;
 }
 
-QComboBox::down-arrow {
-    image: url(PLACEHOLDER_FOR_ARROW_ICON); /* Add path to a down arrow icon if available */
-    width: 10px;
-    height: 10px;
-}
-/* Add path if using icon: image: url(:/icons/down_arrow.svg); */
 /* Use standard arrow if no icon path provided */
 QComboBox::down-arrow {
      border: solid #a9b7c6;
@@ -201,7 +222,7 @@ QLabel {
     padding-left: 5px;
 }
 
-/* --- Text Edit (e.g., Code Viewer, Personality) --- */
+/* --- Text Edit (General / Dialogs / Input) --- */
 QTextEdit {
     background-color: #2b2b2b; /* Consistent dark background */
     color: #a9b7c6; /* Default text color */
@@ -210,6 +231,24 @@ QTextEdit {
     padding: 5px;
     /* Font family inherited from QWidget unless overridden */
 }
+
+#UserInputTextEdit { /* Style the main chat input */
+     background-color: #3c3f41;
+     color: #dcdcdc;
+     border: 1px solid #555555;
+     border-radius: 15px; /* Rounded input */
+     padding: 6px 10px; /* Adjust padding */
+     /* min-height handled by widget logic */
+}
+#UserInputTextEdit:focus {
+    border: 1px solid #4b6eaf; /* Highlight focus */
+}
+#UserInputTextEdit:disabled {
+    background-color: #3a3a3a;
+    color: #777777;
+    border-color: #4a4a4a;
+}
+
 
 #CodeViewerEdit {
     /* Specific monospace font for code viewer */
@@ -224,7 +263,7 @@ QTextEdit {
      /* Inherits proportional font from QWidget */
 }
 
-/* --- List Widget (e.g., Code Viewer List) --- */
+/* --- List Widget (e.g., Code Viewer List, Session Manager) --- */
 QListWidget {
     background-color: #313335;
     color: #a9b7c6;
@@ -252,14 +291,42 @@ QListWidget::item:hover {
     background-color: #3e4143; /* Subtle hover */
 }
 
+/* --- Tree Widget (RAG Viewer) --- */
+QTreeWidget {
+    background-color: #313335;
+    color: #a9b7c6;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 0px; /* No padding on the widget itself */
+    alternate-background-color: #353739; /* Subtle striping */
+    outline: 0; /* Remove focus outline */
+}
+
+QTreeWidget::item {
+    padding: 4px 5px; /* Padding within each item */
+    /* border-bottom: 1px solid #3a3a3a; */ /* Optional separator */
+}
+
+QTreeWidget::item:selected {
+    background-color: #4b6eaf; /* Accent color */
+    color: #ffffff;
+}
+
+QTreeWidget::item:hover {
+    background-color: #3e4143; /* Subtle hover */
+}
+
+QHeaderView::section { /* Style tree header */
+    background-color: #3c3f41;
+    color: #dcdcdc;
+    padding: 4px;
+    border: 1px solid #454545;
+    font-weight: bold;
+}
 
 /* --- Dialogs --- */
 QDialog {
     background-color: #313335; /* Consistent dialog background */
-}
-
-#CodeViewerWindow, #PersonalityDialog {
-   /* Inherits QDialog, add specific overrides if needed */
 }
 
 QDialogButtonBox QPushButton {
@@ -273,7 +340,7 @@ QScrollBar:vertical {
     background: #2b2b2b;
     border: 1px solid #3a3a3a;
     width: 12px;
-    margin: 12px 0 12px 0;
+    margin: 0px 0 0px 0; /* Removed top/bottom margin */
     border-radius: 6px;
 }
 QScrollBar::handle:vertical {
@@ -281,24 +348,15 @@ QScrollBar::handle:vertical {
     min-height: 25px;
     border-radius: 5px;
     border: 1px solid #555555;
+    margin: 1px 1px 1px 1px; /* Add small margin around handle */
 }
 QScrollBar::handle:vertical:hover {
     background: #525659;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    background: #313335;
-    height: 11px;
-    subcontrol-origin: margin;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-}
-QScrollBar::add-line:vertical {
-    subcontrol-position: bottom;
-    /* image: url(:/icons/down_arrow.svg); Optionally add arrow */
-}
-QScrollBar::sub-line:vertical {
-    subcontrol-position: top;
-     /* image: url(:/icons/up_arrow.svg); Optionally add arrow */
+    background: transparent; /* Make arrows invisible */
+    height: 0px; /* Hide arrows */
+    border: none;
 }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     background: none;
@@ -308,7 +366,7 @@ QScrollBar:horizontal {
     background: #2b2b2b;
     border: 1px solid #3a3a3a;
     height: 12px;
-    margin: 0 12px 0 12px;
+    margin: 0 0px 0 0px; /* Removed left/right margin */
     border-radius: 6px;
 }
 QScrollBar::handle:horizontal {
@@ -316,24 +374,15 @@ QScrollBar::handle:horizontal {
     min-width: 25px;
     border-radius: 5px;
     border: 1px solid #555555;
+    margin: 1px 1px 1px 1px; /* Add small margin around handle */
 }
 QScrollBar::handle:horizontal:hover {
     background: #525659;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    background: #313335;
-    width: 11px;
-    subcontrol-origin: margin;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-}
-QScrollBar::add-line:horizontal {
-    subcontrol-position: right;
-    /* image: url(:/icons/right_arrow.svg); */
-}
-QScrollBar::sub-line:horizontal {
-    subcontrol-position: left;
-     /* image: url(:/icons/left_arrow.svg); */
+    background: transparent; /* Make arrows invisible */
+    width: 0px; /* Hide arrows */
+    border: none;
 }
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: none;
