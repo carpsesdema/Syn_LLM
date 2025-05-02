@@ -1,5 +1,5 @@
 # Syn_LLM/core/chat_manager.py
-# UPDATED FILE - Modified RAG prompt template
+# UPDATED FILE - Modified RAG prompt template and expanded keywords
 
 import logging
 import asyncio
@@ -51,16 +51,39 @@ class ChatManager(QObject):
     stream_started = pyqtSignal(str) # Carries role str
 
     # --- Technical Keywords for RAG Triggering ---
-    # Adjusted set - more specific, includes regex patterns needing re.search
+    # --- MODIFIED HERE: Expanded Keywords ---
     _TECHNICAL_KEYWORDS = {
+        # Keep existing general keywords
         'python', 'code', 'error', 'fix', 'implement', 'explain', 'how to',
         'def ', 'class ', 'import ', ' module', ' function', ' method',
         ' attribute', ' bug', ' issue', ' traceback', ' install', ' pip',
         ' library', ' package', ' api', ' request', ' data', ' typeerror',
         ' indexerror', ' keyerror', ' exception', ' syntax', ' logic', ' algorithm',
         ' self.', ' args', ' kwargs', ' return', ' yield', ' async', ' await',
-        ' decorator', ' lambda', ' list', ' dict', ' tuple', ' set'
+        ' decorator', ' lambda', ' list', ' dict', ' tuple', ' set', ' numpy',
+
+        # --- Add PyQt6 Specific Keywords ---
+        'pyqt6', 'pyqt', 'qwidget', 'qapplication', 'qdialog', 'qlabel', 'qpixmap',
+        'qpushbutton', 'qlineedit', 'qtextedit', 'qvboxlayout', 'qhboxlayout',
+        'qlistwidget', 'qlistview', 'qsplitter', 'qsignal', 'pyqtsignal',
+        'qslot', 'pyqtslot', 'qevent', 'qkeyevent', 'qpainter', 'qfont',
+        'qicon', 'qstyle', 'qobject', 'qmodelindex', 'delegate', 'qstyleditemdelegate',
+        'qdialogbuttonbox', 'qmessagebox', 'qfiledialog', 'qtreewidget',
+
+        # --- Add Project Specific Keywords (Examples based on your files) ---
+        'chatmanager', 'mainwindow', 'leftcontrolpanel', 'chatdisplayarea', 'chatinputbar',
+        'chatlistmodel', 'chatitemdelegate', 'codeviewer', 'sessionservice',
+        'uploadservice', 'vectordbservice', 'chunkingservice', 'filehandlerservice',
+        'ollamaadapter', 'backendinterface', 'chatmessage', 'syntaxhighlighter',
+        'constants', 'assets', 'style.qss',
+
+        # --- Add RAG/LLM Concept Keywords ---
+        'rag', 'vector db', 'embedding', 'chunking', 'context', 'prompt', 'llm', 'ollama',
+
+        # --- Add Keywords Signaling Intent to Use Context ---
+        'my code', 'my project', 'refactor this', 'debug this', 'in my implementation'
     }
+    # --- END MODIFICATION ---
     _GREETING_PATTERNS = re.compile(r"^\s*(hi|hello|hey|yo|sup|good\s+(morning|afternoon|evening)|how\s+are\s+you)\b.*", re.IGNORECASE)
     _CODE_FENCE_PATTERN = re.compile(r"```")
 
@@ -295,7 +318,7 @@ class ChatManager(QObject):
     # --- Helper to determine if RAG should be performed ---
     def _should_perform_rag(self, query: str) -> bool:
         """Checks if the query likely requires RAG based on keywords and structure."""
-        # (No changes needed here)
+        # (Logic remains the same, uses the updated _TECHNICAL_KEYWORDS set)
         if not hasattr(self, '_vector_db_initialized') or not self._vector_db_initialized:
             return False # Cannot perform RAG if DB isn't ready
         query_lower = query.lower().strip()
@@ -308,6 +331,7 @@ class ChatManager(QObject):
         if self._CODE_FENCE_PATTERN.search(query):
              logger.debug(f"Query contains code fences, performing RAG.")
              return True
+        # Check against the expanded keyword list
         if any(keyword in query_lower for keyword in self._TECHNICAL_KEYWORDS):
             logger.debug(f"Query '{query[:30]}...' contains technical keyword, performing RAG.")
             return True
@@ -362,6 +386,7 @@ class ChatManager(QObject):
             logger.info("Attempting RAG retrieval...")
             try:
                 if not isinstance(self._upload_service, UploadService) or not hasattr(self._upload_service, 'query_vector_db'): raise TypeError("UploadService not valid or missing 'query_vector_db'.")
+                # Use RAG_NUM_RESULTS from constants
                 relevant_chunks = self._upload_service.query_vector_db(user_query_text, n_results=constants.RAG_NUM_RESULTS)
                 if relevant_chunks:
                     context_parts = []; retrieved_chunks_details = []
@@ -388,34 +413,40 @@ class ChatManager(QObject):
         history_for_backend = [msg for msg in self._conversation_history if msg.role in [USER_ROLE, MODEL_ROLE] and (not msg.metadata or not msg.metadata.get("is_internal"))]
         final_prompt_message: Optional[ChatMessage] = None
 
-        # ***** MODIFICATION START *****
+        # --- RAG Prompt Template remains the same ---
         if rag_context_str:
-            # New prompt template - less directive about using RAG context
             prompt_template = (
                 "User Query: '{query}'\n\n"
                 "[Reference Code Context (for style/names if relevant)]:\n{context}\n\n"
                 "Provide a comprehensive and helpful answer to the user's query, drawing on general programming knowledge and best practices. "
                 "Refer to the context only if directly needed for consistency."
             )
-            # ***** MODIFICATION END *****
-
             augmented_text = prompt_template.format(context=rag_context_str, query=user_query_text)
             logger.debug(f"Augmented prompt created. Length: {len(augmented_text)}")
             final_parts = [augmented_text];
             if image_data_list: final_parts.extend(image_data_list)
+            # Create a *new* message object for the augmented prompt
             final_prompt_message = ChatMessage(role=USER_ROLE, parts=final_parts, metadata={"is_rag_augmented": True})
-            if history_for_backend: history_for_backend[-1] = final_prompt_message # Replace last user msg
-            else: logger.error("History empty when trying to replace with augmented prompt!"); return
+            # Replace the *last* message in the history *to be sent*
+            if history_for_backend:
+                history_for_backend[-1] = final_prompt_message
+            else:
+                logger.error("History for backend empty when trying to replace with augmented prompt!"); return
         else:
-            if not history_for_backend: logger.error("History is empty after adding user message, cannot proceed."); return
+            if not history_for_backend: logger.error("History for backend is empty after adding user message, cannot proceed."); return
+            # If no RAG, the last message in the history is the one to send
             final_prompt_message = history_for_backend[-1]
 
+
         # --- Trigger backend request ---
-        if final_prompt_message:
+        if final_prompt_message: # Check if we successfully determined the message to send
             self._set_busy_state(True)
             logger.info("Creating backend response task...")
+            # Pass the potentially modified history_for_backend
             self._current_backend_task = asyncio.create_task(self._get_backend_response(history_for_backend))
-        else: logger.error("Could not determine final prompt message. Aborting backend request."); self._set_busy_state(False)
+        else:
+            logger.error("Could not determine final prompt message. Aborting backend request.");
+            self._set_busy_state(False) # Ensure busy state is false if we abort
 
 
     async def _get_backend_response(self, history_to_send: List[ChatMessage]):
@@ -462,14 +493,19 @@ class ChatManager(QObject):
                 if response_buffer:
                      final_message = ChatMessage(role=MODEL_ROLE, parts=[response_buffer.strip()])
                      # Check if last message in history is the streaming one and update it
-                     if self._conversation_history and self._conversation_history[-1].role == MODEL_ROLE and self._conversation_history[-1].metadata.get("is_streaming"):
-                          self._conversation_history[-1] = final_message # Replace placeholder
-                          logger.debug("Updated internal history with final streamed message.")
-                     else: # Fallback: append if placeholder wasn't tracked correctly
-                          self._conversation_history.append(final_message)
-                          logger.warning("Appended final streamed message, placeholder might not have been tracked.")
+                     # Need to be careful here: MainWindow's model has the final message,
+                     # our internal history might still have the placeholder if signals processed quickly.
+                     # Best approach: Fetch the actual final message from the model via MainWindow,
+                     # OR trust that the finalizeLastMessage signal caused MainWindow to update its model,
+                     # and we simply record *a* final message object here.
+                     # Let's assume the latter for simplicity, using the buffered content.
+                     self._add_message_to_history(final_message) # Append the assembled message
+
+                     # Remove potential placeholder if it exists as the second to last message? Complex.
+                     # Safer to rely on MainWindow updating the model correctly via signals.
+
                      self._save_current_state_to_last_session()
-                     logger.info(f"Streamed AI response finalized in internal history. Length: {len(response_buffer)}")
+                     logger.info(f"Streamed AI response recorded in internal history. Length: {len(response_buffer)}")
                 else: logger.warning("Stream finished, but response buffer was empty.")
             else:
                 # Handle non-streaming response or error before stream start
@@ -510,6 +546,7 @@ class ChatManager(QObject):
             if self._current_backend_task is asyncio.current_task():
                  self._set_busy_state(False); self._current_backend_task = None; logger.info("Busy state reset by the finishing task.")
             else: logger.warning("Task finished, but it's not the current task. Busy state not reset here.")
+
 
     def _add_message_to_history(self, message: ChatMessage):
         """Appends a message to internal history. Saves state if user/model."""

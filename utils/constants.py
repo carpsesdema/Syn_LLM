@@ -91,7 +91,9 @@ VECTOR_DB_COLLECTION_NAME = "synachat_context" # Name for the ChromaDB collectio
 
 RAG_CHUNK_SIZE = 1000 # Characters per chunk
 RAG_CHUNK_OVERLAP = 150 # Overlap between chunks
-RAG_NUM_RESULTS = 2 # CHANGED HERE: Number of chunks to retrieve for context (was 3)
+# --- MODIFIED HERE: Ensure RAG context can be retrieved ---
+RAG_NUM_RESULTS = 2 # Number of chunks to retrieve for context
+# --- END MODIFICATION ---
 RAG_MAX_FILE_SIZE_MB = 50 # Max file size (in MB) to process for RAG DB
 # RAG_RELEVANCE_THRESHOLD = 0.7 # Chroma uses distance, lower is better
 
